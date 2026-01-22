@@ -99,11 +99,4 @@ Utilizamos Ruff para mantener el código limpio y unificado bajo un solo estánd
 - Formatear automáticamente: `ruff format .`
 - Ejecutar pruebas: `pytest`
 
-<p align="center">Hecho con 💙 por la <strong>Fundación Summer</strong> • 2025</p>
-
-### 3. Siguiente paso recomendado para tu entorno
-
-Una vez actualizados el `README` y el `pyproject.toml`, asegúrate de correr:
-
-1.  `poetry lock` para refrescar el archivo de bloqueo sin Black.
-2.  `pre-commit autoupdate` para asegurar que el hook de Ruff esté al día.
+<p align="center">Hecho con 💙 por la <strong>Fundación Summer</strong> • 2026</p>
