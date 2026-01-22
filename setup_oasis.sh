@@ -29,7 +29,7 @@ do
     mkdir -p services/$SERVICE/tests
     mkdir -p services/$SERVICE/schemas
     mkdir -p services/$SERVICE/crud
-    
+
     # Crear archivos __init__.py para que Python los reconozca como paquetes
     touch services/$SERVICE/__init__.py
     touch services/$SERVICE/api/__init__.py
@@ -39,14 +39,14 @@ do
     touch services/$SERVICE/tests/__init__.py
     touch services/$SERVICE/schemas/__init__.py
     touch services/$SERVICE/crud/__init__.py
-    
+
     # Archivos fundamentales del microservicio
     touch services/$SERVICE/main.py            # Punto de entrada FastAPI
     touch services/$SERVICE/api/v1/api.py      # CENTRALIZADOR de rutas v1
     touch services/$SERVICE/core/config.py     # Configuración Pydantic
     touch services/$SERVICE/Dockerfile         # Configuración para Cloud Run
     touch services/$SERVICE/requirements.txt   # Para dependencias específicas si no usas Poetry global
-    
+
     echo "🏗️  Estructura profesional creada para: $SERVICE"
 done
 

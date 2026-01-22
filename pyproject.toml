@@ -3,6 +3,7 @@ name = "oasis-api"
 version = "0.1.0"
 description = "Backend de microservicios para OASIS Digital"
 authors = ["Oasis Team"]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -19,6 +20,7 @@ httpx = "^0.27.0"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
 ruff = "^0.3.0"  # Ruff ahora maneja linting y formatting
+pre-commit = "^4.5.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

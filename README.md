@@ -23,7 +23,7 @@
 
 * 🤖 **AI Agents**: Agentes especializados en *Coaching* y *Mentoría* utilizando Google Gemini.
 * 🎮 **OASIS Journey**: Motor de gamificación con niveles, puntos (XP) y hitos tipo Salesforce Trailhead.
-* 📊 **CRM Analytics**: Monitoreo de salud emocional con cálculo de *Health Score* y NPS dinámico.  
+* 📊 **CRM Analytics**: Monitoreo de salud emocional con cálculo de *Health Score* y NPS dinámico.
 * 🔒 **Enterprise Security**: Autenticación integrada con Supabase y políticas RLS granulares.
 * 🚀 **Scalability**: Arquitectura desacoplada lista para **Google Cloud Run**.
 
@@ -34,7 +34,7 @@ El ecosistema está fragmentado en microservicios especializados para garantizar
 ```text
                [ Frontend Next.js ]
                        ⬆
-              [ API Gateway /v1/ ]  
+              [ API Gateway /v1/ ]
      ┌─────────────┬─────────────┬─────────────┐
 [ AI-Service ]   [ CRM-Service ]   [ Journey-Service ] ...
      └─────────────┴─────────────┴─────────────┘
@@ -45,7 +45,7 @@ El ecosistema está fragmentado en microservicios especializados para garantizar
 ## 🛠️ Stack Tecnológico
 
 - **Lenguaje**: Python 3.11+
-- **Framework**: FastAPI (Asíncrono) 
+- **Framework**: FastAPI (Asíncrono)
 - **Base de Datos**: PostgreSQL + pgvector (vía Supabase)
 - **IA**: Google Gemini 1.5 Flash / Pro
 - **Calidad**: Ruff (Linting & Formatting)
@@ -59,7 +59,7 @@ El ecosistema está fragmentado en microservicios especializados para garantizar
 2. API Key de Google AI (Gemini).
 3. Poetry instalado.
 
-### Instalación 
+### Instalación
 
 Clonar y acceder:
 
@@ -70,7 +70,7 @@ cd oasis-api
 
 Configurar entorno:
 
-```bash  
+```bash
 cp .env.example .env
 # Edita .env con tus credenciales
 ```
@@ -78,7 +78,7 @@ cp .env.example .env
 Instalar dependencias y hooks:
 
 ```bash
-poetry install  
+poetry install
 pre-commit install
 ```
 
@@ -95,7 +95,7 @@ pre-commit install
 
 Utilizamos Ruff para mantener el código limpio y unificado bajo un solo estándar.
 
-- Analizar código: `ruff check .`  
+- Analizar código: `ruff check .`
 - Formatear automáticamente: `ruff format .`
 - Ejecutar pruebas: `pytest`
 
