@@ -86,10 +86,11 @@ pre-commit install
 
 | Rol          | Alcance                                                               |
 |--------------|----------------------------------------------------------------------|
+| Owner  | Control total de facturación, borrado de datos y gestión de Admins.    |
+| Admin  | Control total de configuración, roles de sistema y logs de IA.      |
+| Colaborador    | Administración de habitantes, carga de recursos y gestión de eventos/CRM. |
 | Participante | Acceso a su propio viaje, foro comunitario y recursos de bienestar. |
-| Gestor       | Administración de habitantes, carga de recursos y gestión de eventos/CRM. |
 | Visitante    | Acceso público a contenido de awareness y recursos gratuitos.       |
-| Super Admin  | Control total de configuración, roles de sistema y logs de IA.      |
 
 ## 🧪 Desarrollo y Calidad
 
