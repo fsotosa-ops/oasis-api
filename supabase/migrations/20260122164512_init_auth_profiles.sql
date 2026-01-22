@@ -1,3 +1,4 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- 1. Definición de Roles (Matriz Oasis)
 -- 'visitante' es el rol base para awareness y recursos gratuitos
 CREATE TYPE user_role AS ENUM ('owner', 'admin', 'gestor', 'participante', 'visitante');
@@ -39,8 +40,7 @@ BEGIN
   VALUES (
     new.id,
     new.email,
-    'visitante',
-    -- Capturamos metadatos que vengan del registro (ej: interés en awareness)
+    'visitante'::user_role, -- Casteo explícito al tipo Enum
     COALESCE(new.raw_user_meta_data, '{}'::jsonb)
   );
   RETURN NEW;

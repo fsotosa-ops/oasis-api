@@ -84,3 +84,16 @@ async def get_current_user(
         )
 
     return response.data
+
+
+class RoleChecker:
+    def __init__(self, allowed_roles: list[str]):
+        self.allowed_roles = allowed_roles
+
+    def __call__(self, user: dict = Depends(get_current_user)):  # noqa: B008
+        if user.get("role") not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Acceso denegado. Se requiere: {self.allowed_roles}",
+            )
+        return user
