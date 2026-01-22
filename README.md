@@ -99,4 +99,4 @@ Utilizamos Ruff para mantener el código limpio y unificado bajo un solo estánd
 - Formatear automáticamente: `ruff format .`
 - Ejecutar pruebas: `pytest`
 
-<p align="center">Hecho con 💙 por la <strong>Fundación Summer</strong> • 2026</p>
+<p align="center">Hecho con 💙 para la <strong>Fundación Summer</strong> • 2026</p>
