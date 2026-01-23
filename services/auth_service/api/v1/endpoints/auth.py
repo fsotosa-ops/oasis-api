@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # --- Imports Comunes ---
 from common.auth.security import get_current_user
@@ -18,6 +19,7 @@ from services.auth_service.schemas.auth import (
 )
 
 router = APIRouter()
+security = HTTPBearer()
 
 
 # -----------------------------------------------------------------------------
@@ -204,12 +206,14 @@ async def logout(
 async def read_users_me(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db=Depends(get_supabase_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
 ) -> Any:
     """
     Obtiene la identidad del usuario y sus contextos (membresías).
     Esencial para que el Frontend sepa qué organizaciones mostrar.
     """
     user_id = current_user["id"]
+    db.postgrest.auth(token.credentials)
 
     # A. Obtener Perfil Base
     profile_res = (
@@ -218,12 +222,14 @@ async def read_users_me(
     if not profile_res.data:
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
 
-    # B. Obtener Membresías con JOIN a Organizaciones
+    query_columns = (
+        "role, status, joined_at, "
+        "organizations(id, name, slug, type, settings, created_at)"
+    )
+
     memberships_res = (
         await db.table("organization_members")
-        .select(
-            "role, status, joined_at, organizations(id, name, slug, type, settings)"
-        )
+        .select(query_columns)
         .eq("user_id", user_id)
         .execute()
     )

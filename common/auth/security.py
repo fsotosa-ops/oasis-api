@@ -59,15 +59,17 @@ async def get_current_user(
     user_id = payload.get("sub")
     db = await get_admin_client()
     try:
+        # Se actualizó la selección: 'role' ya no existe, usamos 'is_platform_admin'
         response = (
             await db.table("profiles")
-            .select("id, email, role")
+            .select("id, email, is_platform_admin")
             .eq("id", user_id)
             .single()
             .execute()
         )
         return response.data
     except Exception as err:
+        logging.error(f"Error al recuperar perfil: {err}")
         raise HTTPException(
             status_code=500, detail="Error al consultar perfil"
         ) from err
@@ -80,7 +82,17 @@ class RoleChecker:
         self.allowed_roles = allowed_roles
 
     def __call__(self, user: dict = Depends(get_current_user)):  # noqa: B008
-        if user.get("role") not in self.allowed_roles:
+        # 1. Super Admin de plataforma tiene acceso total
+        if user.get("is_platform_admin") is True:
+            return user
+
+        # 2. Validación de roles legacy
+        # Como 'role' se eliminó de profiles, user.get("role") será None.
+        # Esto bloqueará acceso por defecto a menos que se implemente
+        # lógica de roles por organización en el endpoint específico.
+        user_role = user.get("role")
+
+        if user_role not in self.allowed_roles:
             msg = (
                 f"Acceso denegado. Se requiere uno de estos roles: {self.allowed_roles}"
             )

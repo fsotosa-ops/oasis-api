@@ -168,7 +168,8 @@ async def main():
                         m_res = (
                             supabase.table("organization_members")
                             .upsert(
-                                membership_data, on_conflict="organization_id,user_id"
+                                membership_data,
+                                on_conflict="organization_id,user_id",
                             )
                             .execute()
                         )
