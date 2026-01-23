@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+# Imports de Common (Lo compartido)
 from common.auth.security import get_current_user
-from common.database.client import get_supabase_client
-from common.schemas.auth import (
+from common.database.client import get_admin_client, get_supabase_client
+from common.schemas.auth import ProfileOut
+from services.auth_service.crud.audit import log_user_action
+
+# Imports Locales del Microservicio (La nueva estructura)
+from services.auth_service.schemas.auth import (
     LoginCredentials,
-    ProfileOut,
     RefreshTokenRequest,
     TokenSchema,
     UserRegister,
@@ -18,15 +22,11 @@ router = APIRouter()
 )
 async def register(
     user_in: UserRegister,
+    request: Request,
     db=Depends(get_supabase_client),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ):
-    """
-    Registra un nuevo usuario (Rol por defecto: 'visitante').
-    Devuelve la sesión iniciada inmediatamente.
-    """
     try:
-        # 1. Crear usuario en Auth (Supabase GoTrue)
-        # El trigger en BD se encargará de crear el perfil en public.profiles
         auth_response = await db.auth.sign_up(
             {
                 "email": user_in.email,
@@ -36,11 +36,20 @@ async def register(
         )
 
         if not auth_response.session:
-            # Caso: Confirmación de email requerida
             raise HTTPException(
                 status_code=status.HTTP_202_ACCEPTED,
                 detail="Usuario registrado. Por favor confirma tu correo.",
             )
+
+        # Usamos el CRUD local para el log
+        await log_user_action(
+            db=admin_db,
+            user_id=auth_response.user.id,
+            action="REGISTER",
+            ip_address=request.client.host,
+            user_agent=request.headers.get("user-agent"),
+            metadata={"provider": "email", "full_name": user_in.full_name},
+        )
 
         return {
             "access_token": auth_response.session.access_token,
@@ -50,18 +59,16 @@ async def register(
         }
 
     except Exception as err:
-        # B904: Explicitly chain the exception
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)
-        ) from err
+        raise HTTPException(status_code=400, detail=str(err)) from err
 
 
 @router.post("/login", response_model=TokenSchema)
 async def login(
     credentials: LoginCredentials,
+    request: Request,
     db=Depends(get_supabase_client),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ):
-    """Inicio de sesión para obtener Access y Refresh Tokens."""
     try:
         response = await db.auth.sign_in_with_password(
             {"email": credentials.email, "password": credentials.password}
@@ -70,6 +77,16 @@ async def login(
         if not response.session:
             raise HTTPException(status_code=400, detail="Error al iniciar sesión")
 
+        # Usamos el CRUD local para el log
+        await log_user_action(
+            db=admin_db,
+            user_id=response.user.id,
+            action="LOGIN",
+            ip_address=request.client.host,
+            user_agent=request.headers.get("user-agent"),
+            metadata={"method": "password"},
+        )
+
         return {
             "access_token": response.session.access_token,
             "refresh_token": response.session.refresh_token,
@@ -77,22 +94,17 @@ async def login(
             "user": response.user.model_dump(),
         }
     except Exception as err:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales incorrectas"
-        ) from err
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas") from err
 
 
 @router.post("/refresh", response_model=TokenSchema)
 async def refresh_token(
-    body: RefreshTokenRequest,
-    db=Depends(get_supabase_client),  # noqa: B008
+    body: RefreshTokenRequest, db=Depends(get_supabase_client)  # noqa: B008
 ):
-    """Obtiene un nuevo Access Token usando el Refresh Token."""
     try:
         response = await db.auth.refresh_session(body.refresh_token)
-
         if not response.session:
-            raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
+            raise HTTPException(status_code=401, detail="Sesión inválida")
 
         return {
             "access_token": response.session.access_token,
@@ -101,21 +113,28 @@ async def refresh_token(
             "user": response.user.model_dump(),
         }
     except Exception as err:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token inválido"
-        ) from err
+        raise HTTPException(status_code=401, detail="Refresh token inválido") from err
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(db=Depends(get_supabase_client)):  # noqa: B008
-    """Cierra la sesión del lado del servidor."""
+async def logout(
+    request: Request,
+    db=Depends(get_supabase_client),  # noqa: B008
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
+):
+    # Log de salida
+    await log_user_action(
+        db=admin_db,
+        user_id=current_user["id"],
+        action="LOGOUT",
+        ip_address=request.client.host,
+        user_agent=request.headers.get("user-agent"),
+    )
     await db.auth.sign_out()
     return None
 
 
 @router.get("/me", response_model=ProfileOut)
-async def read_users_me(
-    current_user: dict = Depends(get_current_user),  # noqa: B008
-):
-    """Retorna el perfil del habitante autenticado (incluyendo rol)."""
+async def read_users_me(current_user: dict = Depends(get_current_user)):  # noqa: B008
     return current_user
