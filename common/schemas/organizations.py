@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field
 
 
 # ============================================================================
@@ -85,28 +85,13 @@ class MemberUserInfo(BaseModel):
 # ============================================================================
 
 class MemberAdd(BaseModel):
-    """Schema for adding a member to an organization.
-
-    Provide either email OR user_id (not both).
-    - email: For inviting by email (typical UI flow)
-    - user_id: For programmatic operations where you have the ID
-    """
-    email: EmailStr | None = Field(None, description="Email of the user to invite")
-    user_id: str | None = Field(None, description="UUID of the user to add")
+    """Schema for adding a member to an organization."""
+    email: EmailStr = Field(..., description="Email of the user to invite")
     role: str = Field(
         default="participante",
         description="Role to assign: 'owner', 'admin', 'facilitador', 'participante'",
         example="participante",
     )
-
-    @model_validator(mode="after")
-    def check_email_or_user_id(self):
-        """Ensure exactly one of email or user_id is provided."""
-        if not self.email and not self.user_id:
-            raise ValueError("Either 'email' or 'user_id' must be provided")
-        if self.email and self.user_id:
-            raise ValueError("Provide either 'email' or 'user_id', not both")
-        return self
 
 
 class MemberRoleUpdate(BaseModel):

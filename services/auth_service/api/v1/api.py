@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from services.auth_service.api.v1.endpoints import auth, organizations, users
+from services.auth_service.api.v1.endpoints import audit, auth, organizations, users
 
 api_router = APIRouter()
 
@@ -14,3 +14,6 @@ api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(
     organizations.router, prefix="/organizations", tags=["Organizations"]
 )
+
+# 4. Rutas de Auditoría (Logs de actividad)
+api_router.include_router(audit.router, prefix="/audit", tags=["Audit"])

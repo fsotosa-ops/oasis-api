@@ -116,27 +116,46 @@ async def add_member_to_org(
         )
 
     # 3. Buscar usuario destino (Usando ADMIN_DB)
-    # CORRECCIÓN: Usamos .limit(1) en vez de .maybe_single()
-    # Esto siempre devuelve un objeto APIResponse, donde .data es una lista (vacía o con 1 elemento)
-    target_user_res = (
-        await admin_db.table("profiles")
-        .select("id")
-        .eq("email", member_in.email)
-        .limit(1)
-        .execute()
-    )
+    # Soporta búsqueda por email O por user_id
+    target_user_id = None
 
-    # --- ESCENARIO 1: Usuario NO existe ---
-    # Verificamos si la lista está vacía
-    if not target_user_res.data or len(target_user_res.data) == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="Usuario no registrado en la plataforma. (Invitaciones pendientes)",
+    if member_in.user_id:
+        # --- ESCENARIO A: Búsqueda por user_id ---
+        target_user_res = (
+            await admin_db.table("profiles")
+            .select("id")
+            .eq("id", member_in.user_id)
+            .limit(1)
+            .execute()
+        )
+        if target_user_res.data:
+            target_user_id = target_user_res.data[0]["id"]
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Usuario no encontrado con el ID proporcionado.",
+            )
+
+    elif member_in.email:
+        # --- ESCENARIO B: Búsqueda por email ---
+        target_user_res = (
+            await admin_db.table("profiles")
+            .select("id")
+            .eq("email", member_in.email)
+            .limit(1)
+            .execute()
         )
 
-    # --- ESCENARIO 2: Usuario EXISTE ---
-    # Tomamos el primer elemento de la lista
-    target_user_id = target_user_res.data[0]["id"]
+        if target_user_res.data:
+            # Usuario existe - obtener su ID
+            target_user_id = target_user_res.data[0]["id"]
+        else:
+            # Usuario NO existe - TODO: Implementar invitaciones pendientes
+            # Por ahora retornamos error indicando que se podría invitar
+            raise HTTPException(
+                status_code=404,
+                detail="Usuario no registrado en la plataforma. (Invitaciones pendientes por implementar)",
+            )
 
     # Verificar si ya es miembro
     # Usamos count='exact', head=True para verificar existencia eficientemente
