@@ -12,6 +12,8 @@ from common.schemas.logs import LogCategory
 from services.auth_service.crud.audit import log_user_action
 from services.auth_service.schemas.auth import (
     LoginCredentials,
+    PasswordResetRequest,
+    PasswordUpdate,
     RefreshTokenRequest,
     TokenSchema,
     UserRegister,
@@ -250,3 +252,69 @@ async def read_users_me(
                 )
 
     return {**profile_res.data, "memberships": formatted_memberships}
+
+
+# -----------------------------------------------------------------------------
+# 6. Recuperación de Contraseña
+# -----------------------------------------------------------------------------
+@router.post("/password/reset-request", status_code=status.HTTP_200_OK)
+async def request_password_reset(
+    payload: PasswordResetRequest,
+    db=Depends(get_supabase_client),  # noqa: B008
+) -> Any:
+    """Inicia flujo de recuperación. Supabase envía el email."""
+    try:
+        await db.auth.reset_password_email(payload.email)
+    except Exception:
+        # Silencioso para evitar enumeración de usuarios
+        pass
+    return {"message": "Si el correo existe, recibirás instrucciones."}
+
+
+# -----------------------------------------------------------------------------
+# 7. Actualizar Contraseña
+# -----------------------------------------------------------------------------
+@router.post("/password/update", status_code=status.HTTP_200_OK)
+async def update_password(
+    payload: PasswordUpdate,
+    db=Depends(get_supabase_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
+) -> Any:
+    """
+    Cambia la contraseña.
+    Seguridad: Requiere un Token válido (obtenido por Login o por Link de Correo).
+    """
+    try:
+        # 1. Autenticar la sesión actual para verificar que el token es válido
+        user_response = await db.auth.get_user(token.credentials)
+
+        if not user_response or not user_response.user:
+            raise HTTPException(status_code=401, detail="Token inválido o expirado")
+
+        user_id = user_response.user.id
+
+        await admin_db.auth.admin.update_user_by_id(
+            user_id, {"password": payload.new_password}
+        )
+
+        # 3. Auditoría
+        await log_user_action(
+            db=admin_db,
+            user_id=user_id,
+            action="PASSWORD_CHANGE",
+            category=LogCategory.AUTH,
+            metadata={"method": "manual_update"},
+        )
+
+        return {"message": "Contraseña actualizada exitosamente."}
+
+    except Exception as e:
+        print(f"Error update password: {e}")
+        # Si el error ya es HTTP (ej: 401), lo dejamos pasar
+        if isinstance(e, HTTPException):
+            raise e
+        # Si es otro error, lanzamos 400
+        raise HTTPException(
+            status_code=400, detail="No se pudo actualizar la contraseña."
+        ) from e

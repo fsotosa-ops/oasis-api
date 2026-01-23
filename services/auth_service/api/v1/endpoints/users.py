@@ -1,4 +1,3 @@
-# services/auth_service/api/v1/endpoints/users.py
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from common.auth.security import RoleChecker
@@ -12,11 +11,12 @@ router = APIRouter()
 async def update_platform_admin_status(
     user_id: str,
     update_data: UserPlatformAdminUpdate,
-    # Solo el Owner de la plataforma puede nombrar otros Platform Admins
     admin_user: dict = Depends(RoleChecker(["owner"])),  # noqa: B008
     db=Depends(get_admin_client),  # noqa: B008
 ):
-    """Actualiza el privilegio de Administrador de Plataforma (Global)."""
+    """
+    Promueve o degrada a un usuario como Super Admin de la plataforma.
+    """
     response = (
         await db.table("profiles")
         .update({"is_platform_admin": update_data.is_platform_admin})
@@ -29,21 +29,29 @@ async def update_platform_admin_status(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
+async def delete_user_global(
     user_id: str,
     admin_user: dict = Depends(RoleChecker(["owner"])),  # noqa: B008
     db=Depends(get_admin_client),  # noqa: B008
 ):
-    """Elimina permanentemente a un usuario de la plataforma."""
-    await db.auth.admin.delete_user(user_id)
+    """
+    BORRADO GLOBAL: Elimina al usuario de Auth y Profiles.
+    Destruye su acceso a TODAS las organizaciones.
+    """
+    try:
+        await db.auth.admin.delete_user(user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Error eliminando usuario: {e}"
+        ) from e
     return None
 
 
 @router.get("/", response_model=list[UserAdminOut])
 async def list_all_users(
-    admin_user: dict = Depends(RoleChecker(["owner", "admin", "gestor"])),  # noqa: B008
+    admin_user: dict = Depends(RoleChecker(["owner", "admin"])),  # noqa: B008
     db=Depends(get_admin_client),  # noqa: B008
 ):
-    """Lista todos los perfiles registrados en la plataforma."""
+    """Lista todos los usuarios de la plataforma (Vista Global)."""
     response = await db.table("profiles").select("*").execute()
     return response.data

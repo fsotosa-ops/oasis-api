@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
-# Importamos el esquema de membresías local
 from .organizations import MembershipOut
 
 
@@ -31,15 +30,22 @@ class TokenSchema(BaseModel):
     user: dict[str, Any]
 
 
-# 2. Perfil Multi-Tenant (Lo que devuelve /me)
+# 2. Gestión de Contraseñas (NUEVO)
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordUpdate(BaseModel):
+    new_password: str
+
+
+# 3. Perfil Multi-Tenant
 class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     full_name: str | None = None
     avatar_url: str | None = None
     is_platform_admin: bool = False
-
-    # Lista de contextos (Donde el usuario es miembro)
     memberships: list[MembershipOut] = []
 
     class Config:

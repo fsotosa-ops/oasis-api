@@ -196,3 +196,63 @@ async def add_member_to_org(
         "joined_at": full_member.data["joined_at"],
         "organization": org_data,
     }
+
+
+@router.patch("/{org_id}/members/{user_id}", response_model=MembershipOut)
+async def update_member_role(
+    org_id: str,
+    user_id: str,
+    member_in: MemberAdd,  # Reutilizamos para el campo 'role'
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db=Depends(get_supabase_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
+):
+    """Actualiza el rol de un usuario dentro de una organización específica."""
+    db.postgrest.auth(token.credentials)
+    requester_id = current_user["id"]
+
+    # 1. Verificar que el que pide sea Owner/Admin de esa Org
+    perms = (
+        await db.table("organization_members")
+        .select("role")
+        .eq("organization_id", org_id)
+        .eq("user_id", requester_id)
+        .single()
+        .execute()
+    )
+
+    if not perms.data or perms.data["role"] not in ["owner", "admin"]:
+        raise HTTPException(status_code=403, detail="No tienes permisos suficientes")
+
+    # 2. Actualizar el rol (Usando admin_db por RLS)
+    update_res = (
+        await admin_db.table("organization_members")
+        .update({"role": member_in.role})
+        .eq("organization_id", org_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not update_res.data:
+        raise HTTPException(status_code=404, detail="Membresía no encontrada")
+
+    # 3. Retornar objeto completo
+    query = (
+        "role, status, joined_at, "
+        "organizations(id, name, slug, type, settings, created_at)"
+    )
+    full_member = (
+        await admin_db.table("organization_members")
+        .select(query)
+        .eq("id", update_res.data[0]["id"])
+        .single()
+        .execute()
+    )
+
+    return {
+        "role": full_member.data["role"],
+        "status": full_member.data["status"],
+        "joined_at": full_member.data["joined_at"],
+        "organization": full_member.data["organizations"],
+    }

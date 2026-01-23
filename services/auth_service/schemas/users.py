@@ -1,4 +1,3 @@
-# services/auth_service/schemas/users.py
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -7,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class UserAdminOut(BaseModel):
-    """Esquema detallado para la gestión de usuarios por un Administrador."""
+    """Esquema detallado para la gestión global de usuarios."""
 
     id: UUID
     email: EmailStr
@@ -16,13 +15,11 @@ class UserAdminOut(BaseModel):
     is_platform_admin: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
 
 
 class UserPlatformAdminUpdate(BaseModel):
-    """Esquema para actualizar el estatus de administrador de plataforma."""
-
     is_platform_admin: bool
