@@ -1,6 +1,16 @@
+from typing import Any
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr
 
-# --- Modelos de Entrada (Request) ---
+# Importamos el esquema de membresías local
+from .organizations import MembershipOut
+
+
+# 1. Auth & Tokens
+class LoginCredentials(BaseModel):
+    email: EmailStr
+    password: str
 
 
 class UserRegister(BaseModel):
@@ -9,16 +19,8 @@ class UserRegister(BaseModel):
     full_name: str | None = None
 
 
-class LoginCredentials(BaseModel):
-    email: EmailStr
-    password: str
-
-
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
-
-
-# --- Modelos de Salida (Response) ---
 
 
 class TokenSchema(BaseModel):
@@ -26,4 +28,25 @@ class TokenSchema(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
-    user: dict  # Datos crudos del usuario de Supabase
+    user: dict[str, Any]
+
+
+# 2. Perfil Multi-Tenant (Lo que devuelve /me)
+class UserResponse(BaseModel):
+    id: UUID
+    email: EmailStr
+    full_name: str | None = None
+    avatar_url: str | None = None
+    is_platform_admin: bool = False
+
+    # Lista de contextos (Donde el usuario es miembro)
+    memberships: list[MembershipOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    avatar_url: str | None = None
+    metadata: dict[str, Any] | None = None

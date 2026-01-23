@@ -4,26 +4,46 @@ from fastapi.middleware.cors import CORSMiddleware
 from common.config import get_settings
 from common.database.client import get_admin_client
 from services.auth_service.api.v1.api import api_router
+from services.auth_service.core.config import settings
 
-settings = get_settings()
+global_settings = get_settings()
+
+description_text = """
+## 🔐 Oasis Identity & Access Management
+Servicio de autenticación Multi-Tenant (B2B/B2C).
+
+### Headers Requeridos
+Para operaciones contextuales (dentro de una empresa), enviar:
+`X-Organization-ID: <uuid>`
+"""
+
+tags_metadata = [
+    {"name": "Auth", "description": "Login, Registro y Contexto (/me)"},
+    {"name": "Organizations", "description": "Gestión de Empresas y Membresías"},
+    {"name": "Users", "description": "Administración de Plataforma"},
+]
 
 app = FastAPI(
-    title="Oasis Auth Service",
+    title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Microservicio encargado de la identidad y perfiles",
+    description=settings.DESCRIPTION,
+    openapi_tags=tags_metadata,
+    # Configuración de Rutas de Documentación
+    openapi_url=f"{global_settings.API_V1_STR}/openapi.json",
+    docs_url=f"{global_settings.API_V1_STR}/docs",
+    redoc_url=f"{global_settings.API_V1_STR}/redoc",  # <--- AGREGAR ESTA LÍNEA
 )
 
-# Configurar CORS (Vital para que el Frontend Next.js pueda hablar con esto)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # En producción cambiar por la URL del frontend real
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if global_settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in global_settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# Incluir las rutas definidas en api.py
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix=global_settings.API_V1_STR)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
