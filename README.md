@@ -5,7 +5,7 @@
 # OASIS API 🌴
 
 <p align="center">
-  <strong>Plataforma de Salud Mental y Resiliencia impulsada por IA</strong>
+  <strong>Plataforma Multi-Tenant de Salud Mental y Resiliencia impulsada por IA</strong>
 </p>
 
 <p align="center">
@@ -17,87 +17,107 @@
 
 ---
 
-**OASIS API** es el motor de microservicios que alimenta el portal digital de la **Fundación Summer**. Diseñado con una arquitectura *Cloud-Native*, gestiona el viaje emocional de los participantes a través de gamificación, soporte de IA en tiempo real y métricas de impacto para organizaciones.
+**OASIS API** es el motor de microservicios que alimenta el ecosistema digital de la **Fundación Summer**. Diseñado con una arquitectura **Multi-Tenant (B2B/B2C)**, gestiona de forma segura identidades, organizaciones y el viaje emocional de los participantes mediante IA y gamificación.
 
 ## ✨ Características Principales
 
+* 🏢 **Arquitectura Multi-Tenant**: Soporte nativo para Organizaciones (Sponsors/Empresas) y Comunidad (B2C) en una misma instancia.
+* 🛡️ **Seguridad Contextual**: Autenticación vía Supabase Auth con validación de contexto `X-Organization-ID`.
+* 👁️ **Sistema de Auditoría**: Logs inmutables de seguridad y cumplimiento normativo (ISO/GDPR ready).
 * 🤖 **AI Agents**: Agentes especializados en *Coaching* y *Mentoría* utilizando Google Gemini.
-* 🎮 **OASIS Journey**: Motor de gamificación con niveles, puntos (XP) y hitos tipo Salesforce Trailhead.
-* 📊 **CRM Analytics**: Monitoreo de salud emocional con cálculo de *Health Score* y NPS dinámico.
-* 🔒 **Enterprise Security**: Autenticación integrada con Supabase y políticas RLS granulares.
+* 🎮 **OASIS Journey**: Motor de gamificación con niveles y puntos (XP).
 * 🚀 **Scalability**: Arquitectura desacoplada lista para **Google Cloud Run**.
 
 ## 🏗️ Arquitectura del Sistema
 
-El ecosistema está fragmentado en microservicios especializados para garantizar alta disponibilidad y escalado independiente:
-
+El ecosistema está fragmentado en microservicios especializados para garantizar alta disponibilidad:
 ```text
                [ Frontend Next.js ]
                        ⬆
               [ API Gateway /v1/ ]
      ┌─────────────┬─────────────┬─────────────┐
-[ AI-Service ]   [ CRM-Service ]   [ Journey-Service ] ...
+[ Auth-Service ] [ Journey-Service ] [ AI-Service ] ...
      └─────────────┴─────────────┴─────────────┘
                        ⬆
                [ Supabase DB / RAG ]
+          (Auth, Profiles, Audit, Vectors)
 ```
 
 ## 🛠️ Stack Tecnológico
 
-- **Lenguaje**: Python 3.11+
-- **Framework**: FastAPI (Asíncrono)
-- **Base de Datos**: PostgreSQL + pgvector (vía Supabase)
-- **IA**: Google Gemini 1.5 Flash / Pro
-- **Calidad**: Ruff (Linting & Formatting)
-- **Infraestructura**: Docker + Google Cloud Run
+- Lenguaje: Python 3.11+
+- Framework: FastAPI (Asíncrono)
+- Base de Datos: PostgreSQL + pgvector (vía Supabase)
+- Auth: Supabase Auth (JWT) + RLS Policies
+- IA: Google Gemini 1.5 Flash / Pro
+- Calidad: Ruff (Linting & Formatting) y Pre-commit hooks
+- Infraestructura: Docker + Google Cloud Run
 
 ## 🚀 Inicio Rápido
 
 ### Requisitos Previos
 
-1. Instancia de Supabase activa.
-2. API Key de Google AI (Gemini).
-3. Poetry instalado.
+1. Instancia de Supabase activa (Local o Cloud).
+2. Python 3.11+ y Poetry instalado.
+3. Variables de entorno configuradas (.env).
 
 ### Instalación
 
-Clonar y acceder:
-
+Clonar y configurar:
 ```bash
 git clone https://github.com/tu-usuario/oasis-api.git
 cd oasis-api
-```
-
-Configurar entorno:
-
-```bash
 cp .env.example .env
-# Edita .env con tus credenciales
 ```
 
-Instalar dependencias y hooks:
-
+Instalar dependencias:
 ```bash
 poetry install
 pre-commit install
 ```
 
-## 👥 Matriz de Roles
+Inicializar Base de Datos (Seed):
 
-| Rol          | Alcance                                                               |
-|--------------|----------------------------------------------------------------------|
-| Owner  | Control total de facturación, borrado de datos y gestión de Admins.    |
-| Admin  | Control total de configuración, roles de sistema y logs de IA.      |
-| Colaborador    | Administración de habitantes, carga de recursos y gestión de eventos/CRM. |
-| Participante | Acceso a su propio viaje, foro comunitario y recursos de bienestar. |
-| Visitante    | Acceso público a contenido de awareness y recursos gratuitos.       |
+> Carga usuarios, roles y organizaciones por defecto.
+```bash
+python -m scripts.create_users
+```
 
-## 🧪 Desarrollo y Calidad
+Ejecutar Servidor de Desarrollo:
+```bash
+poetry run uvicorn services.auth_service.main:app --reload
+```
 
-Utilizamos Ruff para mantener el código limpio y unificado bajo un solo estándar.
+Documentación interactiva disponible en: http://localhost:8000/api/v1/docs
 
-- Analizar código: `ruff check .`
-- Formatear automáticamente: `ruff format .`
-- Ejecutar pruebas: `pytest`
+## 👥 Matriz de Seguridad y Roles
+
+El sistema maneja dos niveles de roles: Nivel Plataforma (Global) y Nivel Organización (Contextual).
+
+1. **Nivel Plataforma (Global)**
+
+| Rol | Alcance |
+|-----|---------|
+| Platform Admin | "God Mode". Puede ver todos los logs de auditoría, gestionar cualquier organización y realizar tareas de mantenimiento global. |
+| Usuario Estándar | Acceso limitado a sus propios datos y a las organizaciones donde es miembro. |
+
+2. **Nivel Organización (Contextual)**
+
+> Estos permisos aplican solo dentro de la organización especificada en el header `X-Organization-ID`.
+
+| Rol | Alcance |
+|-----|---------|
+| Owner | Dueño de la instancia B2B. Gestión de facturación, configuración de marca y gestión de admins. |
+| Admin | Gestión operativa: invitar miembros, ver reportes y gestionar equipos. |
+| Facilitador | (Staff) Puede gestionar eventos y ver progreso de participantes asignados. |
+| Participante | (Usuario final) Acceso a journeys, contenido y herramientas de bienestar. |
+
+## 📡 Integración API
+
+Para consumir endpoints protegidos por organización (ej: invitar miembro), se deben enviar los siguientes headers:
+```http
+Authorization: Bearer <access_token>
+X-Organization-ID: <uuid-de-la-organizacion>
+```
 
 <p align="center">Hecho con 💙 para la <strong>Fundación Summer</strong> • 2026</p>
