@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # 1. Imports de Common (Rutas Absolutas como en tus archivos)
 from common.auth.security import get_current_user
-from common.database.client import get_supabase_client
+from common.database.client import get_admin_client, get_supabase_client
 
 # 2. Imports de Schemas (Asumiendo que creaste el archivo organizations.py en schemas)
 from services.auth_service.schemas.organizations import (
@@ -13,7 +14,7 @@ from services.auth_service.schemas.organizations import (
 )
 
 router = APIRouter()
-
+security = HTTPBearer()
 # --- ENDPOINTS ---
 
 
@@ -21,38 +22,43 @@ router = APIRouter()
 async def create_organization(
     org_in: OrganizationCreate,
     current_user: dict = Depends(get_current_user),  # noqa: B008
-    db=Depends(get_supabase_client),  # noqa: B008
+    # Usamos admin_db para escribir saltándonos las reglas RLS
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ):
     user_id = current_user["id"]
 
-    # 1. Crear Organización
-    # Nota: Manejar excepciones de duplicidad de slug aquí si es necesario
-    org_res = (
-        await db.table("organizations")
-        .insert(
-            {
-                "name": org_in.name,
-                "slug": org_in.slug,
-                "type": org_in.type,
-                "settings": org_in.settings,
-            }
+    # 1. Crear Organización (Usando permisos de Super Admin)
+    try:
+        org_res = (
+            await admin_db.table("organizations")
+            .insert(
+                {
+                    "name": org_in.name,
+                    "slug": org_in.slug,
+                    "type": org_in.type,
+                    "settings": org_in.settings,
+                }
+            )
+            .execute()
         )
-        .execute()
-    )
-
-    if not org_res.data:
-        raise HTTPException(status_code=400, detail="Error al crear organización")
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Error creando organización. ¿Quizás el slug ya existe?",
+        ) from e
 
     new_org = org_res.data[0]
 
-    # 2. Asignar Owner (El usuario que crea es el dueño)
+    # 2. Asignar Owner (Usando permisos de Super Admin)
+    # Esto es seguro porque lo hace el Backend, no el usuario.
     member_data = {
         "organization_id": new_org["id"],
         "user_id": user_id,
         "role": "owner",
         "status": "active",
     }
-    await db.table("organization_members").insert(member_data).execute()
+
+    await admin_db.table("organization_members").insert(member_data).execute()
 
     return new_org
 
@@ -61,8 +67,11 @@ async def create_organization(
 async def get_my_organizations(
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db=Depends(get_supabase_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
 ):
+
     user_id = current_user["id"]
+    db.postgrest.auth(token.credentials)
 
     # Traer organizaciones donde soy miembro activo
     res = (
@@ -84,10 +93,14 @@ async def add_member_to_org(
     member_in: MemberAdd,
     current_user: dict = Depends(get_current_user),  # noqa: B008
     db=Depends(get_supabase_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ):
+    # 1. Autenticar contexto del solicitante
+    db.postgrest.auth(token.credentials)
     requester_id = current_user["id"]
 
-    # 1. Verificar Permisos (Solo Owner o Admin de esa org pueden invitar)
+    # 2. Verificar Permisos (Usamos 'db' con RLS)
     perms = (
         await db.table("organization_members")
         .select("role")
@@ -102,23 +115,45 @@ async def add_member_to_org(
             status_code=403, detail="No tienes permisos para invitar miembros"
         )
 
-    # 2. Buscar ID del usuario por Email
-    target_user = (
-        await db.table("profiles")
+    # 3. Buscar usuario destino (Usando ADMIN_DB)
+    # CORRECCIÓN: Usamos .limit(1) en vez de .maybe_single()
+    # Esto siempre devuelve un objeto APIResponse, donde .data es una lista (vacía o con 1 elemento)
+    target_user_res = (
+        await admin_db.table("profiles")
         .select("id")
         .eq("email", member_in.email)
-        .single()
+        .limit(1)
         .execute()
     )
 
-    if not target_user.data:
+    # --- ESCENARIO 1: Usuario NO existe ---
+    # Verificamos si la lista está vacía
+    if not target_user_res.data or len(target_user_res.data) == 0:
         raise HTTPException(
-            status_code=404, detail="El usuario no está registrado en la plataforma"
+            status_code=404,
+            detail="Usuario no registrado en la plataforma. (Invitaciones pendientes)",
         )
 
-    target_user_id = target_user.data["id"]
+    # --- ESCENARIO 2: Usuario EXISTE ---
+    # Tomamos el primer elemento de la lista
+    target_user_id = target_user_res.data[0]["id"]
 
-    # 3. Insertar Membresía
+    # Verificar si ya es miembro
+    # Usamos count='exact', head=True para verificar existencia eficientemente
+    existing_member = (
+        await admin_db.table("organization_members")
+        .select("id", count="exact", head=True)
+        .eq("organization_id", org_id)
+        .eq("user_id", target_user_id)
+        .execute()
+    )
+
+    if existing_member.count > 0:
+        raise HTTPException(
+            status_code=409, detail="El usuario ya pertenece a esta organización"
+        )
+
+    # Insertar Membresía (Usando ADMIN_DB)
     new_member_data = {
         "organization_id": org_id,
         "user_id": target_user_id,
@@ -127,26 +162,37 @@ async def add_member_to_org(
     }
 
     try:
-        res = await db.table("organization_members").insert(new_member_data).execute()
+        res = (
+            await admin_db.table("organization_members")
+            .insert(new_member_data)
+            .execute()
+        )
     except Exception as e:
-        raise HTTPException(
-            status_code=400, detail="El usuario ya pertenece a esta organización"
-        ) from e
+        raise HTTPException(status_code=400, detail="Error al agregar miembro") from e
 
-    # 4. Retornar respuesta completa
-    # Hacemos fetch para traer la org anidada y cumplir con el schema MembershipOut
+    # 5. Retornar respuesta completa
+    query = (
+        "role, status, joined_at, "
+        "organizations(id, name, slug, type, settings, created_at)"
+    )
+
     full_member = (
-        await db.table("organization_members")
-        .select("*, organizations(*)")
+        await admin_db.table("organization_members")
+        .select(query)
         .eq("id", res.data[0]["id"])
         .single()
         .execute()
     )
 
-    # Mapeo manual si es necesario para ajustar al schema Pydantic
+    org_data = full_member.data.get("organizations")
+    if not org_data:
+        raise HTTPException(
+            status_code=500, detail="Error de integridad: Organización no encontrada"
+        )
+
     return {
         "role": full_member.data["role"],
         "status": full_member.data["status"],
         "joined_at": full_member.data["joined_at"],
-        "organization": full_member.data["organizations"],
+        "organization": org_data,
     }
