@@ -11,7 +11,7 @@ class ProfileOut(BaseModel):
 
     id: str
     email: EmailStr
-    role: str
+    is_platform_admin: bool = False
     metadata: dict[str, Any] | None = Field(default_factory=dict)
 
     class Config:
