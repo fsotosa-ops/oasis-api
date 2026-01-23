@@ -1,3 +1,4 @@
+# common/auth/security.py
 import logging
 
 import httpx
@@ -5,17 +6,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
-from common.config import get_settings
+from common.config import settings
 from common.database.client import get_admin_client
 
-settings = get_settings()
 security = HTTPBearer()
-
 _jwks_cache = None
 
 
 async def get_jwks():
-    """Obtiene y cachea las llaves públicas de Supabase para ES256."""
+    """Obtiene y cachea las llaves públicas de Supabase."""
     global _jwks_cache
     if _jwks_cache is None:
         async with httpx.AsyncClient() as client:
@@ -24,10 +23,9 @@ async def get_jwks():
                 response.raise_for_status()
                 _jwks_cache = response.json()
             except Exception as err:
-                logging.error(f"Error obteniendo JWKS: {err}")
+                logging.error(f"Error JWKS: {err}")
                 raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Error de validación con el servidor de identidad",
+                    status_code=503, detail="Error de identidad"
                 ) from err
     return _jwks_cache
 
@@ -35,34 +33,31 @@ async def get_jwks():
 async def validate_token(
     auth: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
 ) -> dict:
-    """Valida el JWT usando el algoritmo ES256 y la curva P-256."""
+    """Valida el JWT usando estrategia dinámica (HS256 local / ES256 prod)."""
     token = auth.credentials
-    jwks = await get_jwks()
-
     try:
-        payload = jwt.decode(
-            token,
-            jwks,
-            algorithms=[settings.JWT_ALGORITHM],
-            audience=settings.JWT_AUDIENCE,
-            options={"verify_sub": True},
-        )
-        return payload
+        if settings.JWT_ALGORITHM == "HS256":
+            return jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience=settings.JWT_AUDIENCE,
+            )
+        else:
+            jwks = await get_jwks()
+            return jwt.decode(
+                token, jwks, algorithms=["ES256"], audience=settings.JWT_AUDIENCE
+            )
     except JWTError as err:
-        logging.warning(f"Fallo en validación de token: {err}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido, expirado o firma no reconocida",
-        ) from err
+        raise HTTPException(status_code=401, detail="Token no válido") from err
 
 
 async def get_current_user(
     payload: dict = Depends(validate_token),  # noqa: B008
 ) -> dict:
-    """Cruza la identidad del token con 'profiles' para obtener el rol."""
+    """Cruza identidad del token con 'profiles' usando el cliente admin."""
     user_id = payload.get("sub")
     db = await get_admin_client()
-
     try:
         response = (
             await db.table("profiles")
@@ -71,29 +66,23 @@ async def get_current_user(
             .single()
             .execute()
         )
+        return response.data
     except Exception as err:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al consultar el perfil del habitante",
+            status_code=500, detail="Error al consultar perfil"
         ) from err
-
-    if not response.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="El perfil del habitante no existe",
-        )
-
-    return response.data
 
 
 class RoleChecker:
+    """Verificador de roles con soporte para auditoría Oasis."""
+
     def __init__(self, allowed_roles: list[str]):
         self.allowed_roles = allowed_roles
 
     def __call__(self, user: dict = Depends(get_current_user)):  # noqa: B008
         if user.get("role") not in self.allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Acceso denegado. Se requiere: {self.allowed_roles}",
+            msg = (
+                f"Acceso denegado. Se requiere uno de estos roles: {self.allowed_roles}"
             )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
         return user

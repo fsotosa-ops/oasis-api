@@ -16,6 +16,7 @@ class LoginCredentials(BaseModel):
 
 @router.get("/me", response_model=ProfileOut)
 async def read_users_me(current_user: dict = Depends(get_current_user)):  # noqa: B008
+    """Retorna el perfil del habitante actualmente autenticado."""
     return current_user
 
 
@@ -23,13 +24,10 @@ async def read_users_me(current_user: dict = Depends(get_current_user)):  # noqa
 async def login(
     credentials: LoginCredentials, db=Depends(get_supabase_client)  # noqa: B008
 ):
+    """Punto único de acceso para habitantes de Oasis."""
     try:
-        res = await db.auth.sign_in_with_password(
+        return await db.auth.sign_in_with_password(
             {"email": credentials.email, "password": credentials.password}
         )
-        return res
     except Exception as err:
-        # B904: Añadimos 'from err' para trazabilidad
-        raise HTTPException(
-            status_code=401, detail="Credenciales Oasis incorrectas"
-        ) from err
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas") from err
