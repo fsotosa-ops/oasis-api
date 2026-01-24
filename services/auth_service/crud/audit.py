@@ -8,13 +8,13 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from supabase import AsyncClient
-
 from common.schemas.logs import LogCategory
+from supabase import AsyncClient
 
 
 class AuditOperationError(Exception):
     """Raised when an audit operation fails."""
+
     pass
 
 
@@ -32,7 +32,7 @@ async def log_user_action(
 ) -> dict | None:
     """
     Registra un evento en la tabla audit.logs.
-    
+
     Args:
         db: Cliente de Supabase (debe ser admin client)
         user_id: UUID del actor
@@ -44,7 +44,7 @@ async def log_user_action(
         metadata: Datos adicionales
         ip_address: IP del cliente
         user_agent: User-Agent del cliente
-        
+
     Returns:
         Log creado o None si falló
     """
@@ -79,7 +79,7 @@ async def log_user_action(
         }
 
         response = await db.schema("audit").from_("logs").insert(payload).execute()
-        
+
         return response.data[0] if response.data else None
 
     except Exception as e:
@@ -102,7 +102,7 @@ async def list_audit_logs(
     """
     Lista logs de auditoría con filtros.
     Solo accesible por Platform Admins o Org Admins (según RLS).
-    
+
     Args:
         db: Cliente de Supabase
         skip: Offset para paginación
@@ -113,13 +113,13 @@ async def list_audit_logs(
         action: Filtrar por acción
         start_date: Fecha inicio
         end_date: Fecha fin
-        
+
     Returns:
         Tupla de (lista de logs, total count)
     """
     try:
         query = db.schema("audit").from_("logs").select("*", count="exact")
-        
+
         if organization_id:
             query = query.eq("organization_id", str(organization_id))
         if user_id:
@@ -132,16 +132,15 @@ async def list_audit_logs(
             query = query.gte("occurred_at", start_date.isoformat())
         if end_date:
             query = query.lte("occurred_at", end_date.isoformat())
-        
+
         response = (
-            await query
-            .order("occurred_at", desc=True)
+            await query.order("occurred_at", desc=True)
             .range(skip, skip + limit - 1)
             .execute()
         )
-        
+
         return response.data or [], response.count or 0
-        
+
     except Exception as err:
         logging.error(f"Error listing audit logs: {err}")
         raise AuditOperationError(f"Error al listar logs: {err}") from err
@@ -155,20 +154,21 @@ async def get_user_activity(
 ) -> list[dict]:
     """
     Obtiene la actividad reciente de un usuario.
-    
+
     Args:
         db: Cliente de Supabase
         user_id: UUID del usuario
         days: Número de días hacia atrás
         limit: Límite de resultados
-        
+
     Returns:
         Lista de actividades
     """
     try:
         from datetime import timedelta
+
         cutoff_date = datetime.utcnow() - timedelta(days=days)
-        
+
         response = (
             await db.schema("audit")
             .from_("logs")
@@ -179,9 +179,9 @@ async def get_user_activity(
             .limit(limit)
             .execute()
         )
-        
+
         return response.data or []
-        
+
     except Exception as err:
         logging.error(f"Error fetching user activity for {user_id}: {err}")
         raise AuditOperationError(f"Error al obtener actividad: {err}") from err
@@ -195,20 +195,21 @@ async def get_organization_activity(
 ) -> list[dict]:
     """
     Obtiene la actividad reciente de una organización.
-    
+
     Args:
         db: Cliente de Supabase
         organization_id: UUID de la organización
         days: Número de días hacia atrás
         limit: Límite de resultados
-        
+
     Returns:
         Lista de actividades
     """
     try:
         from datetime import timedelta
+
         cutoff_date = datetime.utcnow() - timedelta(days=days)
-        
+
         response = (
             await db.schema("audit")
             .from_("logs")
@@ -219,9 +220,9 @@ async def get_organization_activity(
             .limit(limit)
             .execute()
         )
-        
+
         return response.data or []
-        
+
     except Exception as err:
         logging.error(f"Error fetching org activity for {organization_id}: {err}")
         raise AuditOperationError(f"Error al obtener actividad: {err}") from err
@@ -230,10 +231,10 @@ async def get_organization_activity(
 async def get_audit_categories(db: AsyncClient) -> list[dict]:
     """
     Obtiene todas las categorías de auditoría disponibles.
-    
+
     Args:
         db: Cliente de Supabase
-        
+
     Returns:
         Lista de categorías
     """
@@ -245,9 +246,9 @@ async def get_audit_categories(db: AsyncClient) -> list[dict]:
             .order("code")
             .execute()
         )
-        
+
         return response.data or []
-        
+
     except Exception as err:
         logging.error(f"Error fetching audit categories: {err}")
         raise AuditOperationError(f"Error al obtener categorías: {err}") from err

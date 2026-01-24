@@ -2,6 +2,11 @@
 """
 Pydantic schemas for auth_service.
 """
+from services.auth_service.schemas.audit import (
+    AuditCategoryOut,
+    AuditLogOut,
+    PaginatedAuditLogsResponse,
+)
 from services.auth_service.schemas.auth import (
     LoginCredentials,
     PasswordResetRequest,
@@ -11,11 +16,6 @@ from services.auth_service.schemas.auth import (
     UserRegister,
     UserResponse,
     UserUpdate,
-)
-from services.auth_service.schemas.audit import (
-    AuditCategoryOut,
-    AuditLogOut,
-    PaginatedAuditLogsResponse,
 )
 from services.auth_service.schemas.organizations import (
     MemberAdd,
@@ -46,7 +46,7 @@ from services.auth_service.schemas.users import (
 __all__ = [
     # Auth
     "LoginCredentials",
-    "PasswordResetRequest", 
+    "PasswordResetRequest",
     "PasswordUpdate",
     "RefreshTokenRequest",
     "TokenSchema",

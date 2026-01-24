@@ -9,44 +9,51 @@ from uuid import UUID
 
 from supabase import AsyncClient
 
-
 # ============================================================================
 # Exceptions
 # ============================================================================
 
+
 class OrganizationNotFoundError(Exception):
     """Raised when an organization is not found."""
+
     pass
 
 
 class OrganizationExistsError(Exception):
     """Raised when trying to create an organization that already exists."""
+
     pass
 
 
 class OrganizationOperationError(Exception):
     """Raised when an organization operation fails."""
+
     pass
 
 
 class MembershipNotFoundError(Exception):
     """Raised when a membership is not found."""
+
     pass
 
 
 class MembershipExistsError(Exception):
     """Raised when a membership already exists."""
+
     pass
 
 
 class MembershipOperationError(Exception):
     """Raised when a membership operation fails."""
+
     pass
 
 
 # ============================================================================
 # Organization Operations
 # ============================================================================
+
 
 async def get_organization_by_id(
     db: AsyncClient,
@@ -75,7 +82,9 @@ async def get_organization_by_id(
 
     except Exception as err:
         logging.error(f"Error fetching organization {org_id}: {err}")
-        raise OrganizationOperationError(f"Error al obtener organización: {err}") from err
+        raise OrganizationOperationError(
+            f"Error al obtener organización: {err}"
+        ) from err
 
 
 async def get_organization_by_slug(
@@ -105,7 +114,9 @@ async def get_organization_by_slug(
 
     except Exception as err:
         logging.error(f"Error fetching organization by slug {slug}: {err}")
-        raise OrganizationOperationError(f"Error al obtener organización: {err}") from err
+        raise OrganizationOperationError(
+            f"Error al obtener organización: {err}"
+        ) from err
 
 
 async def list_all_organizations(
@@ -133,8 +144,7 @@ async def list_all_organizations(
             query = query.eq("type", org_type)
 
         response = (
-            await query
-            .order("created_at", desc=True)
+            await query.order("created_at", desc=True)
             .range(skip, skip + limit - 1)
             .execute()
         )
@@ -143,7 +153,9 @@ async def list_all_organizations(
 
     except Exception as err:
         logging.error(f"Error listing organizations: {err}")
-        raise OrganizationOperationError(f"Error al listar organizaciones: {err}") from err
+        raise OrganizationOperationError(
+            f"Error al listar organizaciones: {err}"
+        ) from err
 
 
 async def list_user_organizations(
@@ -174,18 +186,22 @@ async def list_user_organizations(
         orgs = []
         for item in response.data or []:
             if item.get("organizations"):
-                orgs.append({
-                    **item["organizations"],
-                    "membership_role": item["role"],
-                    "membership_status": item["status"],
-                    "joined_at": item["joined_at"],
-                })
+                orgs.append(
+                    {
+                        **item["organizations"],
+                        "membership_role": item["role"],
+                        "membership_status": item["status"],
+                        "joined_at": item["joined_at"],
+                    }
+                )
 
         return orgs
 
     except Exception as err:
         logging.error(f"Error listing user organizations for {user_id}: {err}")
-        raise OrganizationOperationError(f"Error al listar organizaciones: {err}") from err
+        raise OrganizationOperationError(
+            f"Error al listar organizaciones: {err}"
+        ) from err
 
 
 async def create_organization(
@@ -217,17 +233,21 @@ async def create_organization(
         # Check if slug exists
         existing = await get_organization_by_slug(db, slug)
         if existing:
-            raise OrganizationExistsError(f"Organization with slug '{slug}' already exists")
+            raise OrganizationExistsError(
+                f"Organization with slug '{slug}' already exists"
+            )
 
         # Create organization
         response = (
             await db.table("organizations")
-            .insert({
-                "name": name,
-                "slug": slug,
-                "type": org_type,
-                "settings": settings or {},
-            })
+            .insert(
+                {
+                    "name": name,
+                    "slug": slug,
+                    "type": org_type,
+                    "settings": settings or {},
+                }
+            )
             .execute()
         )
 
@@ -285,7 +305,9 @@ async def update_organization(
         raise
     except Exception as err:
         logging.error(f"Error updating organization {org_id}: {err}")
-        raise OrganizationOperationError(f"Error al actualizar organización: {err}") from err
+        raise OrganizationOperationError(
+            f"Error al actualizar organización: {err}"
+        ) from err
 
 
 async def delete_organization(
@@ -304,10 +326,7 @@ async def delete_organization(
     """
     try:
         response = (
-            await db.table("organizations")
-            .delete()
-            .eq("id", str(org_id))
-            .execute()
+            await db.table("organizations").delete().eq("id", str(org_id)).execute()
         )
 
         if not response.data:
@@ -317,12 +336,15 @@ async def delete_organization(
         raise
     except Exception as err:
         logging.error(f"Error deleting organization {org_id}: {err}")
-        raise OrganizationOperationError(f"Error al eliminar organización: {err}") from err
+        raise OrganizationOperationError(
+            f"Error al eliminar organización: {err}"
+        ) from err
 
 
 # ============================================================================
 # Membership Operations
 # ============================================================================
+
 
 async def get_membership(
     db: AsyncClient,
@@ -385,7 +407,7 @@ async def list_organization_members(
             .select(
                 "id, role, status, joined_at, user_id, "
                 "profiles(id, email, full_name, avatar_url)",
-                count="exact"
+                count="exact",
             )
             .eq("organization_id", str(org_id))
         )
@@ -396,22 +418,23 @@ async def list_organization_members(
             query = query.eq("role", role)
 
         response = (
-            await query
-            .order("joined_at", desc=True)
+            await query.order("joined_at", desc=True)
             .range(skip, skip + limit - 1)
             .execute()
         )
 
         members = []
         for m in response.data or []:
-            members.append({
-                "id": m["id"],
-                "user_id": m["user_id"],
-                "role": m["role"],
-                "status": m["status"],
-                "joined_at": m["joined_at"],
-                "user": m.get("profiles"),
-            })
+            members.append(
+                {
+                    "id": m["id"],
+                    "user_id": m["user_id"],
+                    "role": m["role"],
+                    "status": m["status"],
+                    "joined_at": m["joined_at"],
+                    "user": m.get("profiles"),
+                }
+            )
 
         return members, response.count or 0
 
@@ -451,12 +474,14 @@ async def add_member(
 
         response = (
             await db.table("organization_members")
-            .insert({
-                "organization_id": str(org_id),
-                "user_id": str(user_id),
-                "role": role,
-                "status": status,
-            })
+            .insert(
+                {
+                    "organization_id": str(org_id),
+                    "user_id": str(user_id),
+                    "role": role,
+                    "status": status,
+                }
+            )
             .execute()
         )
 
@@ -618,10 +643,14 @@ async def transfer_ownership(
             raise MembershipNotFoundError("Target user is not a member")
 
         # Demote old owner to admin
-        old_owner = await update_membership(db, org_id_str, from_id_str, {"role": "admin"})
+        old_owner = await update_membership(
+            db, org_id_str, from_id_str, {"role": "admin"}
+        )
 
         # Promote new owner
-        new_owner = await update_membership(db, org_id_str, to_id_str, {"role": "owner"})
+        new_owner = await update_membership(
+            db, org_id_str, to_id_str, {"role": "owner"}
+        )
 
         return old_owner, new_owner
 

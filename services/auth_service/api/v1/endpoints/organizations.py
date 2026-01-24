@@ -154,7 +154,10 @@ async def add_member_to_org(
             # Por ahora retornamos error indicando que se podría invitar
             raise HTTPException(
                 status_code=404,
-                detail="Usuario no registrado en la plataforma. (Invitaciones pendientes por implementar)",
+                detail=(
+                    "Usuario no registrado en la plataforma."
+                    "(Invitaciones pendientes por implementar)"
+                ),
             )
 
     # Verificar si ya es miembro

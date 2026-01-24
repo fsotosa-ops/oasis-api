@@ -17,9 +17,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from common.config import get_settings
 from common.database.client import (
     close_db_connections,
-    verify_connection,
     health_check,
+    verify_connection,
 )
+from common.exceptions import OasisException, oasis_exception_handler
+from common.middleware import RateLimitConfig, setup_rate_limiting
 from services.auth_service.api.v1.api import api_router
 from services.auth_service.core.config import settings
 
@@ -30,15 +32,16 @@ global_settings = get_settings()
 # Application Lifecycle
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application lifecycle manager.
-    
+
     Startup:
     - Verify database connection
     - Pre-warm connection pool
-    
+
     Shutdown:
     - Close database connections
     - Cleanup resources
@@ -46,16 +49,16 @@ async def lifespan(app: FastAPI):
     # === STARTUP ===
     print(f"🚀 Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     print(f"   Environment: {global_settings.ENVIRONMENT}")
-    
+
     try:
         await verify_connection()
         print("✅ Database connection verified")
     except Exception as e:
         print(f"⚠️  Database connection warning: {e}")
         # Don't fail startup - allow service to start and retry later
-    
+
     yield
-    
+
     # === SHUTDOWN ===
     print("👋 Shutting down...")
     await close_db_connections()
@@ -93,7 +96,7 @@ X-Organization-ID: <uuid>
 **Organization Level:**
 - `owner` - Full control of the organization
 - `admin` - Operational management, can invite members
-- `facilitador` - Staff, can view participant progress  
+- `facilitador` - Staff, can view participant progress
 - `participante` - End user, access to content
 
 ### API Sections
@@ -110,7 +113,7 @@ tags_metadata = [
         "description": "Authentication: login, register, tokens, password management",
     },
     {
-        "name": "Users", 
+        "name": "Users",
         "description": "User management: profiles, platform admin operations",
     },
     {
@@ -155,6 +158,26 @@ if global_settings.BACKEND_CORS_ORIGINS:
 
 
 # ============================================================================
+# Exception Handlers & Rate Limiting
+# ============================================================================
+
+# Custom exception handler for consistent error responses
+app.add_exception_handler(OasisException, oasis_exception_handler)
+
+# Rate limiting - auth endpoints get stricter limits
+setup_rate_limiting(
+    app,
+    RateLimitConfig(
+        enabled=True,
+        default_limit="200/minute",
+        auth_limit="20/minute",  # Stricter for login/register
+        write_limit="100/minute",
+        read_limit="300/minute",
+    ),
+)
+
+
+# ============================================================================
 # Routes
 # ============================================================================
 
@@ -165,28 +188,29 @@ app.include_router(api_router, prefix=global_settings.API_V1_STR)
 # Health Check
 # ============================================================================
 
+
 @app.get("/health", status_code=status.HTTP_200_OK, tags=["System"])
 async def health_check_endpoint(response: Response):
     """
     Service health check.
-    
+
     Returns:
     - 200 OK: Service is healthy
     - 503 Service Unavailable: Database connection issues
     """
     health = await health_check()
-    
+
     result = {
         "status": "healthy" if health["healthy"] else "unhealthy",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "database": "connected" if health["healthy"] else "disconnected",
     }
-    
+
     if not health["healthy"]:
         result["error"] = health.get("error")
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    
+
     return result
 
 

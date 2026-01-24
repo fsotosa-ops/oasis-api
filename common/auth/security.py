@@ -8,7 +8,7 @@ This module implements a hierarchical permission system:
    - Can access ANY organization without X-Organization-ID header
    - Can manage all users, orgs, and audit logs
    - Bypasses all contextual role checks
-   
+
 2. Organization Roles (Contextual):
    - owner: Full control of their organization
    - admin: Operational management, can invite members
@@ -20,13 +20,13 @@ Usage:
     @router.get("/admin/users")
     async def list_users(admin: dict = Depends(PlatformAdminRequired())):
         ...
-    
+
     # Require specific org role (needs X-Organization-ID header)
     @router.get("/org/members")
     async def list_members(ctx: dict = Depends(OrgRoleChecker(["owner", "admin"]))):
         org_id = ctx["org_id"]
         ...
-    
+
     # Any authenticated user
     @router.get("/me")
     async def get_me(user: dict = Depends(get_current_user)):
@@ -45,6 +45,7 @@ from common.config import settings
 from common.database.client import get_admin_client
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 # ============================================================================
 # JWKS Cache with TTL
@@ -72,21 +73,21 @@ async def get_jwks() -> dict:
                 _jwks_cache = response.json()
                 _jwks_cache_timestamp = current_time
                 logging.info("JWKS cache refreshed successfully")
-            except httpx.TimeoutException as err:
-                logging.error(f"JWKS fetch timeout: {err}")
+            except httpx.TimeoutException as e:
+                logging.error(f"JWKS fetch timeout: {e}")
                 if _jwks_cache is not None:
                     logging.warning("Using expired JWKS cache as fallback")
                     return _jwks_cache
                 raise HTTPException(
                     status_code=503, detail="Identity service unavailable"
-                ) from err
-            except Exception as err:
-                logging.error(f"JWKS fetch error: {err}")
+                ) from e
+            except Exception as e:
+                logging.error(f"JWKS fetch error: {e}")
                 if _jwks_cache is not None:
                     return _jwks_cache
                 raise HTTPException(
                     status_code=503, detail="Identity service error"
-                ) from err
+                ) from e
 
     return _jwks_cache
 
@@ -102,15 +103,16 @@ def clear_jwks_cache():
 # Token Validation
 # ============================================================================
 
+
 async def validate_token(
-    auth: HTTPAuthorizationCredentials = Depends(security),
+    auth: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
 ) -> dict:
     """
     Validate JWT token using dynamic strategy (HS256 local / ES256 prod).
-    
+
     Returns:
         Decoded JWT payload
-        
+
     Raises:
         HTTPException 401: If token is invalid
     """
@@ -128,27 +130,29 @@ async def validate_token(
             return jwt.decode(
                 token, jwks, algorithms=["ES256"], audience=settings.JWT_AUDIENCE
             )
-    except JWTError as err:
-        logging.warning(f"Invalid token: {err}")
-        raise HTTPException(status_code=401, detail="Invalid token") from err
+    except JWTError as e:
+        logging.warning(f"Invalid token: {e}")
+        raise HTTPException(status_code=401, detail="Invalid token") from e
 
 
 # ============================================================================
 # User Context
 # ============================================================================
 
+
 async def get_current_user(
-    payload: dict = Depends(validate_token),
+    payload: dict = Depends(validate_token),  # noqa: B008
 ) -> dict:
     """
     Get the current user's profile from the database.
-    
+
     This is the base user context - it does NOT include organization roles.
     For organization-specific permissions, use OrgRoleChecker or OrgMemberRequired.
-    
+
     Returns:
-        User profile dict with: id, email, full_name, avatar_url, is_platform_admin, metadata
-        
+        User profile dict with: id, email, full_name, avatar_url,
+        is_platform_admin, metadata
+
     Raises:
         HTTPException 401: If no user ID in token
         HTTPException 404: If profile not found
@@ -175,15 +179,15 @@ async def get_current_user(
 
     except HTTPException:
         raise
-    except Exception as err:
-        logging.error(f"Error fetching profile for user_id={user_id}: {err}")
-        raise HTTPException(
-            status_code=500, detail="Error fetching profile"
-        ) from err
+    except Exception as e:
+        logging.error(f"Error fetching profile for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Error fetching profile") from e
 
 
 async def get_optional_user(
-    auth: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
+    auth: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(optional_security)  # noqa: B008
+    ],
 ) -> dict | None:
     """
     Get current user if authenticated, None otherwise.
@@ -191,7 +195,7 @@ async def get_optional_user(
     """
     if auth is None:
         return None
-    
+
     try:
         payload = await validate_token(auth)
         return await get_current_user(payload)
@@ -203,15 +207,16 @@ async def get_optional_user(
 # Platform Admin Authorization
 # ============================================================================
 
+
 class PlatformAdminRequired:
     """
     Dependency that requires the user to be a Platform Admin.
-    
+
     Platform Admins have "God Mode" - they can:
     - Access any organization without X-Organization-ID header
     - View all users, orgs, and audit logs
     - Manage any resource in the system
-    
+
     Usage:
         @router.get("/admin/users")
         async def list_users(admin: dict = Depends(PlatformAdminRequired())):
@@ -221,7 +226,7 @@ class PlatformAdminRequired:
 
     async def __call__(
         self,
-        user: dict = Depends(get_current_user),
+        user: dict = Depends(get_current_user),  # noqa: B008
     ) -> dict:
         if not user.get("is_platform_admin"):
             raise HTTPException(
@@ -235,18 +240,19 @@ class PlatformAdminRequired:
 # Organization Role Authorization
 # ============================================================================
 
+
 class OrgRoleChecker:
     """
     Contextual role checker for organization-level permissions.
-    
+
     Validates that:
     1. User is authenticated
     2. X-Organization-ID header is provided (unless Platform Admin)
     3. User is an active member of that organization
     4. User has one of the allowed roles
-    
+
     Platform Admins bypass all checks and get access to any organization.
-    
+
     Usage:
         @router.get("/org/members")
         async def list_members(
@@ -255,7 +261,7 @@ class OrgRoleChecker:
             org_id = ctx["org_id"]
             user_role = ctx["org_role"]  # "owner", "admin", or "platform_admin"
             ...
-    
+
     Returns dict with:
         - All user profile fields
         - org_id: The organization context
@@ -272,7 +278,7 @@ class OrgRoleChecker:
 
     async def __call__(
         self,
-        user: dict = Depends(get_current_user),
+        user: dict = Depends(get_current_user),  # noqa: B008
         x_organization_id: Annotated[str | None, Header()] = None,
     ) -> dict:
         # Platform Admin bypass - has access to everything
@@ -322,7 +328,9 @@ class OrgRoleChecker:
             if user_role not in self.allowed_roles:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Required roles: {self.allowed_roles}. Your role: {user_role}",
+                    detail=(
+                        f"Required roles: {self.allowed_roles}. Your role: {user_role}",
+                    ),
                 )
 
             return {
@@ -344,7 +352,7 @@ class OrgMemberRequired:
     """
     Simplified checker that only requires active membership.
     Does not check for specific roles - any active member can access.
-    
+
     Usage:
         @router.get("/org/content")
         async def view_content(ctx: dict = Depends(OrgMemberRequired())):
@@ -354,7 +362,7 @@ class OrgMemberRequired:
 
     async def __call__(
         self,
-        user: dict = Depends(get_current_user),
+        user: dict = Depends(get_current_user),  # noqa: B008
         x_organization_id: Annotated[str | None, Header()] = None,
     ) -> dict:
         # Platform Admin bypass
@@ -399,6 +407,7 @@ class OrgMemberRequired:
 # Helpers for Path-based Organization Checks
 # ============================================================================
 
+
 async def verify_org_permission(
     user_id: str,
     org_id: str,
@@ -408,16 +417,16 @@ async def verify_org_permission(
     """
     Verify user has required role in an organization.
     Use this when org_id comes from path parameter instead of header.
-    
+
     Args:
         user_id: User's UUID
         org_id: Organization's UUID
         required_roles: List of acceptable roles
         db: Supabase client (will create admin client if None)
-        
+
     Returns:
         Membership dict with role and status
-        
+
     Raises:
         HTTPException 403: If user doesn't have required access
     """
@@ -465,27 +474,27 @@ async def verify_org_access(
     """
     Verify user has access to an organization.
     Platform Admins always have access.
-    
+
     Args:
         user: User dict from get_current_user
         org_id: Organization's UUID
         required_roles: List of acceptable roles
         db: Supabase client
-        
+
     Returns:
         Dict with org_id and org_role
     """
     # Platform Admin bypass
     if user.get("is_platform_admin"):
         return {"org_id": org_id, "org_role": "platform_admin"}
-    
+
     membership = await verify_org_permission(
         user_id=user["id"],
         org_id=org_id,
         required_roles=required_roles,
         db=db,
     )
-    
+
     return {"org_id": org_id, "org_role": membership["role"]}
 
 
@@ -505,51 +514,51 @@ ROLE_HIERARCHY = {
 def can_manage_role(actor_role: str, target_role: str) -> bool:
     """
     Check if an actor can manage (modify/remove) a target based on role hierarchy.
-    
+
     Rules:
     - platform_admin can manage anyone
     - owner can manage anyone in their org
     - admin can manage facilitador and participante
     - facilitador and participante can't manage anyone
-    
+
     Args:
         actor_role: Role of the person trying to make changes
         target_role: Role of the person being changed
-        
+
     Returns:
         True if actor can manage target
     """
     actor_level = ROLE_HIERARCHY.get(actor_role, 0)
     target_level = ROLE_HIERARCHY.get(target_role, 0)
-    
+
     # Can't manage equals or superiors (except platform_admin can manage owners)
     if actor_role == "platform_admin":
         return True
-    
+
     return actor_level > target_level
 
 
 def can_assign_role(actor_role: str, new_role: str) -> bool:
     """
     Check if an actor can assign a specific role.
-    
+
     Rules:
     - platform_admin can assign any role
     - owner can assign any role in their org
     - admin can assign facilitador and participante
     - Others can't assign roles
-    
+
     Args:
         actor_role: Role of the person assigning
         new_role: Role being assigned
-        
+
     Returns:
         True if actor can assign the role
     """
     if actor_role in ["platform_admin", "owner"]:
         return True
-    
+
     if actor_role == "admin":
         return new_role in ["facilitador", "participante"]
-    
+
     return False

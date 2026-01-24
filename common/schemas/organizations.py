@@ -8,13 +8,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-
 # ============================================================================
 # Organization Schemas
 # ============================================================================
 
+
 class OrganizationBase(BaseModel):
     """Base organization fields."""
+
     name: str = Field(..., min_length=2, max_length=100, example="Banco Estado")
     slug: str = Field(
         ...,
@@ -34,17 +35,20 @@ class OrganizationBase(BaseModel):
 
 class OrganizationCreate(OrganizationBase):
     """Schema for creating an organization."""
+
     pass
 
 
 class OrganizationUpdate(BaseModel):
     """Schema for updating an organization. Only updatable fields."""
+
     name: str | None = Field(None, min_length=2, max_length=100)
     settings: dict[str, Any] | None = None
 
 
 class OrganizationOut(OrganizationBase):
     """Standard organization output."""
+
     id: UUID
     created_at: datetime
     updated_at: datetime | None = None
@@ -55,11 +59,13 @@ class OrganizationOut(OrganizationBase):
 
 class OrganizationDetailOut(OrganizationOut):
     """Detailed organization output with member count."""
+
     member_count: int = 0
 
 
 class OrganizationWithRole(OrganizationOut):
     """Organization with the user's role in it."""
+
     membership_role: str
     membership_status: str
     joined_at: datetime | None = None
@@ -69,8 +75,10 @@ class OrganizationWithRole(OrganizationOut):
 # Member/User Schemas (for nested responses)
 # ============================================================================
 
+
 class MemberUserInfo(BaseModel):
     """Basic user info for membership responses."""
+
     id: UUID
     email: EmailStr
     full_name: str | None = None
@@ -84,8 +92,10 @@ class MemberUserInfo(BaseModel):
 # Membership Schemas
 # ============================================================================
 
+
 class MemberAdd(BaseModel):
     """Schema for adding a member to an organization."""
+
     email: EmailStr = Field(..., description="Email of the user to invite")
     role: str = Field(
         default="participante",
@@ -96,6 +106,7 @@ class MemberAdd(BaseModel):
 
 class MemberRoleUpdate(BaseModel):
     """Schema for updating a member's role."""
+
     role: str = Field(
         ...,
         description="New role: 'owner', 'admin', 'facilitador', 'participante'",
@@ -105,6 +116,7 @@ class MemberRoleUpdate(BaseModel):
 
 class MembershipOut(BaseModel):
     """Output schema for a membership."""
+
     user_id: UUID
     role: str
     status: str
@@ -117,6 +129,7 @@ class MembershipOut(BaseModel):
 
 class MembershipWithOrg(BaseModel):
     """Membership with full organization data (used in /me endpoint)."""
+
     role: str
     status: str
     joined_at: datetime | None = None
@@ -128,6 +141,7 @@ class MembershipWithOrg(BaseModel):
 
 class OwnershipTransfer(BaseModel):
     """Schema for transferring organization ownership."""
+
     new_owner_id: str = Field(
         ...,
         description="UUID of the member who will become the new owner",
@@ -138,8 +152,10 @@ class OwnershipTransfer(BaseModel):
 # Paginated Responses
 # ============================================================================
 
+
 class PaginatedOrganizationsResponse(BaseModel):
     """Paginated list of organizations."""
+
     items: list[OrganizationOut]
     total: int
     skip: int
@@ -148,6 +164,7 @@ class PaginatedOrganizationsResponse(BaseModel):
 
 class PaginatedMembersResponse(BaseModel):
     """Paginated list of members."""
+
     items: list[MembershipOut]
     total: int
     skip: int

@@ -10,13 +10,14 @@ from pydantic import BaseModel, EmailStr, Field
 
 from services.auth_service.schemas.organizations import MembershipWithOrg
 
-
 # ============================================================================
 # Base Schemas
 # ============================================================================
 
+
 class UserBase(BaseModel):
     """Base user fields."""
+
     email: EmailStr
     full_name: str | None = None
     avatar_url: str | None = None
@@ -24,6 +25,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for creating a user (registration)."""
+
     password: str = Field(..., min_length=6)
 
 
@@ -31,8 +33,10 @@ class UserCreate(UserBase):
 # Output Schemas
 # ============================================================================
 
+
 class UserAdminOut(BaseModel):
     """Schema for admin view of users."""
+
     id: UUID
     email: EmailStr
     full_name: str | None = None
@@ -48,11 +52,13 @@ class UserAdminOut(BaseModel):
 
 class UserDetailOut(UserAdminOut):
     """Schema for detailed user view including memberships."""
+
     memberships: list[MembershipWithOrg] = []
 
 
 class UserPublicOut(BaseModel):
     """Public user information (for other users to see)."""
+
     id: UUID
     email: EmailStr
     full_name: str | None = None
@@ -64,6 +70,7 @@ class UserPublicOut(BaseModel):
 
 class UserMemberOut(BaseModel):
     """User info as seen in membership context."""
+
     id: UUID
     email: EmailStr
     full_name: str | None = None
@@ -80,8 +87,10 @@ class UserMemberOut(BaseModel):
 # Update Schemas
 # ============================================================================
 
+
 class UserUpdate(BaseModel):
     """Schema for updating user profile."""
+
     full_name: str | None = None
     avatar_url: str | None = None
     metadata: dict[str, Any] | None = None
@@ -89,6 +98,7 @@ class UserUpdate(BaseModel):
 
 class UserPlatformAdminUpdate(BaseModel):
     """Schema for updating platform admin status."""
+
     is_platform_admin: bool
 
 
@@ -96,8 +106,10 @@ class UserPlatformAdminUpdate(BaseModel):
 # Paginated Response
 # ============================================================================
 
+
 class PaginatedUsersResponse(BaseModel):
     """Paginated list of users."""
+
     items: list[UserAdminOut]
     total: int
     skip: int

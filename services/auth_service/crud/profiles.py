@@ -12,11 +12,13 @@ from supabase import AsyncClient
 
 class ProfileNotFoundError(Exception):
     """Raised when a profile is not found."""
+
     pass
 
 
 class ProfileOperationError(Exception):
     """Raised when a profile operation fails."""
+
     pass
 
 
@@ -66,11 +68,7 @@ async def get_profile_by_email(
     """
     try:
         response = (
-            await db.table("profiles")
-            .select("*")
-            .eq("email", email)
-            .limit(1)
-            .execute()
+            await db.table("profiles").select("*").eq("email", email).limit(1).execute()
         )
 
         return response.data[0] if response.data else None
@@ -105,8 +103,7 @@ async def list_all_profiles(
             query = query.or_(f"email.ilike.%{search}%,full_name.ilike.%{search}%")
 
         response = (
-            await query
-            .order("created_at", desc=True)
+            await query.order("created_at", desc=True)
             .range(skip, skip + limit - 1)
             .execute()
         )
@@ -276,12 +273,14 @@ async def get_user_with_memberships(
         memberships = []
         for m in memberships_res.data or []:
             if m.get("organizations"):
-                memberships.append({
-                    "role": m["role"],
-                    "status": m["status"],
-                    "joined_at": m["joined_at"],
-                    "organization": m["organizations"],
-                })
+                memberships.append(
+                    {
+                        "role": m["role"],
+                        "status": m["status"],
+                        "joined_at": m["joined_at"],
+                        "organization": m["organizations"],
+                    }
+                )
 
         profile["memberships"] = memberships
         return profile

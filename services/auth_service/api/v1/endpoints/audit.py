@@ -8,6 +8,7 @@ Read-only endpoints for viewing audit logs:
 - Users: View their own activity
 """
 from datetime import datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -21,7 +22,6 @@ from common.database.client import get_admin_client, get_supabase_client
 from services.auth_service.crud import (
     AuditOperationError,
     get_audit_categories,
-    get_organization_activity,
     get_user_activity,
     list_audit_logs,
 )
@@ -39,6 +39,7 @@ security = HTTPBearer()
 # Platform Admin Endpoints
 # =============================================================================
 
+
 @router.get(
     "/logs",
     response_model=PaginatedAuditLogsResponse,
@@ -46,22 +47,28 @@ security = HTTPBearer()
     description="List all audit logs with filters. Platform Admin only.",
 )
 async def list_all_logs(
-    admin: dict = Depends(PlatformAdminRequired()),
-    db=Depends(get_admin_client),
-    skip: int = Query(0, ge=0, description="Records to skip"),
-    limit: int = Query(100, ge=1, le=500, description="Max records"),
-    organization_id: str | None = Query(None, description="Filter by organization"),
-    user_id: str | None = Query(None, description="Filter by user"),
-    category: str | None = Query(None, description="Filter by category code"),
-    action: str | None = Query(None, description="Search in action field"),
-    start_date: datetime | None = Query(None, description="Start date filter"),
-    end_date: datetime | None = Query(None, description="End date filter"),
+    admin: Annotated[dict, Depends(PlatformAdminRequired())],
+    db: Annotated[Any, Depends(get_admin_client)],
+    skip: Annotated[int, Query(description="Records to skip", ge=0)] = 0,
+    limit: Annotated[int, Query(description="Max records", ge=1, le=500)] = 100,
+    organization_id: Annotated[
+        str | None, Query(description="Filter by organization")
+    ] = None,
+    user_id: Annotated[str | None, Query(description="Filter by user")] = None,
+    category: Annotated[
+        str | None, Query(description="Filter by category code")
+    ] = None,
+    action: Annotated[str | None, Query(description="Search in action field")] = None,
+    # Corrección B008 aquí:
+    start_date: Annotated[
+        datetime | None, Query(description="Start date filter")
+    ] = None,
+    # Corrección B008 aquí:
+    end_date: Annotated[datetime | None, Query(description="End date filter")] = None,
 ):
     """
     Lista todos los logs de auditoría.
-
     Solo accesible por Platform Admins.
-    Soporta múltiples filtros para búsqueda avanzada.
     """
     try:
         logs, total = await list_audit_logs(
@@ -83,13 +90,14 @@ async def list_all_logs(
             "limit": limit,
         }
 
-    except AuditOperationError as err:
-        raise HTTPException(status_code=500, detail=str(err)) from err
+    except AuditOperationError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # =============================================================================
 # Organization Admin Endpoints
 # =============================================================================
+
 
 @router.get(
     "/org",
@@ -98,23 +106,22 @@ async def list_all_logs(
     description="View audit logs for the current organization context.",
 )
 async def get_org_logs(
-    ctx: dict = Depends(OrgRoleChecker(["owner", "admin"])),
-    db=Depends(get_supabase_client),
-    admin_db=Depends(get_admin_client),
-    token: HTTPAuthorizationCredentials = Depends(security),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-    user_id: str | None = Query(None, description="Filter by user"),
-    category: str | None = Query(None, description="Filter by category"),
-    action: str | None = Query(None, description="Search in action"),
-    start_date: datetime | None = Query(None),
-    end_date: datetime | None = Query(None),
+    ctx: Annotated[dict, Depends(OrgRoleChecker(["owner", "admin"]))],
+    db: Annotated[Any, Depends(get_supabase_client)],
+    admin_db: Annotated[Any, Depends(get_admin_client)],
+    token: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    user_id: Annotated[str | None, Query(description="Filter by user")] = None,
+    category: Annotated[str | None, Query(description="Filter by category")] = None,
+    action: Annotated[str | None, Query(description="Search in action")] = None,
+    # Corrección B008 aquí:
+    start_date: Annotated[datetime | None, Query()] = None,
+    # Corrección B008 aquí:
+    end_date: Annotated[datetime | None, Query()] = None,
 ):
     """
     Lista los logs de auditoría de la organización actual.
-
-    Requiere header X-Organization-ID.
-    Accesible por Owners y Admins de la organización.
     """
     org_id = ctx.get("org_id")
     is_platform_admin = ctx.get("org_role") == "platform_admin"
@@ -122,7 +129,9 @@ async def get_org_logs(
     if not org_id:
         raise HTTPException(
             status_code=400,
-            detail="Organization context required. Provide X-Organization-ID header.",
+            detail=(
+                "Organization context required. " "Provide X-Organization-ID header."
+            ),
         )
 
     try:
@@ -162,13 +171,14 @@ async def get_org_logs(
             "limit": limit,
         }
 
-    except AuditOperationError as err:
-        raise HTTPException(status_code=500, detail=str(err)) from err
+    except AuditOperationError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # =============================================================================
 # User Self-Service Endpoints
 # =============================================================================
+
 
 @router.get(
     "/me",
@@ -177,18 +187,15 @@ async def get_org_logs(
     description="View your own recent activity log.",
 )
 async def get_my_activity(
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_supabase_client),
-    token: HTTPAuthorizationCredentials = Depends(security),
-    days: int = Query(30, ge=1, le=365, description="Days to look back"),
-    limit: int = Query(50, ge=1, le=200, description="Max records"),
+    current_user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Any, Depends(get_supabase_client)],
+    token: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    days: Annotated[int, Query(ge=1, le=365, description="Days to look back")] = 30,
+    limit: Annotated[int, Query(ge=1, le=200, description="Max records")] = 50,
 ):
     """
     Obtiene tu propia actividad reciente.
-
-    Cualquier usuario autenticado puede ver su historial.
     """
-    # RLS asegura que solo vea sus propios logs
     db.postgrest.auth(token.credentials)
 
     try:
@@ -209,6 +216,7 @@ async def get_my_activity(
 # Reference Data Endpoints
 # =============================================================================
 
+
 @router.get(
     "/categories",
     response_model=list[AuditCategoryOut],
@@ -216,14 +224,12 @@ async def get_my_activity(
     description="Get all available audit log categories.",
 )
 async def list_categories(
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_supabase_client),
-    token: HTTPAuthorizationCredentials = Depends(security),
+    current_user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[Any, Depends(get_supabase_client)],
+    token: Annotated[HTTPAuthorizationCredentials, Depends(security)],
 ):
     """
     Lista todas las categorías de auditoría disponibles.
-
-    Útil para filtros en el frontend.
     """
     db.postgrest.auth(token.credentials)
 
@@ -231,5 +237,5 @@ async def list_categories(
         categories = await get_audit_categories(db=db)
         return categories
 
-    except AuditOperationError as err:
-        raise HTTPException(status_code=500, detail=str(err)) from err
+    except AuditOperationError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

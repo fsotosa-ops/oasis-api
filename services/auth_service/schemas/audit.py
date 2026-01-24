@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class AuditLogOut(BaseModel):
     """Schema for audit log output."""
+
     id: str
     actor_id: str | None = None
     actor_email: str | None = None
@@ -29,6 +30,7 @@ class AuditLogOut(BaseModel):
 
 class AuditCategoryOut(BaseModel):
     """Schema for audit category output."""
+
     code: str
     name: str
     description: str | None = None
@@ -39,6 +41,7 @@ class AuditCategoryOut(BaseModel):
 
 class PaginatedAuditLogsResponse(BaseModel):
     """Paginated response for audit logs."""
+
     items: list[AuditLogOut]
     total: int
     skip: int

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 
 import httpx
 from dotenv import load_dotenv
+
 from supabase import Client, create_client
 
 # =============================================================================
@@ -36,6 +37,7 @@ DEFAULT_PASSWORD = "Test123!"
 @dataclass
 class OrgConfig:
     """Organization configuration."""
+
     name: str
     slug: str
     org_type: str
@@ -46,6 +48,7 @@ class OrgConfig:
 @dataclass
 class UserConfig:
     """User configuration."""
+
     email: str
     full_name: str
     password: str = DEFAULT_PASSWORD
@@ -144,6 +147,7 @@ DEV_USERS = [
 # SEEDER CLASS
 # =============================================================================
 
+
 class DevSeeder:
     """Seeds development data using API endpoints."""
 
@@ -208,7 +212,9 @@ class DevSeeder:
 
         for org in DEV_ORGANIZATIONS:
             try:
-                self.supabase.table("organizations").delete().eq("slug", org.slug).execute()
+                self.supabase.table("organizations").delete().eq(
+                    "slug", org.slug
+                ).execute()
                 print(f"   🗑️  Deleted org: {org.slug}")
             except Exception:
                 pass
@@ -224,7 +230,7 @@ class DevSeeder:
                     "email": user.email,
                     "password": user.password,
                     "full_name": user.full_name,
-                }
+                },
             )
 
             if response.status_code == 201:
@@ -291,7 +297,7 @@ class DevSeeder:
         try:
             response = self.http.post(
                 f"{self.api_url}/auth/login",
-                json={"email": email, "password": password}
+                json={"email": email, "password": password},
             )
 
             if response.status_code == 200:
@@ -312,10 +318,10 @@ class DevSeeder:
     def set_platform_admin(self, user_id: str, email: str) -> None:
         """Promote user to platform admin (requires direct DB access)."""
         try:
-            self.supabase.table("profiles").update(
-                {"is_platform_admin": True}
-            ).eq("id", user_id).execute()
-            print(f"      🌟 Promoted to Platform Admin")
+            self.supabase.table("profiles").update({"is_platform_admin": True}).eq(
+                "id", user_id
+            ).execute()
+            print("      🌟 Promoted to Platform Admin")
 
             # Log this action manually since it's a direct DB change
             self._log_audit_direct(
@@ -340,7 +346,7 @@ class DevSeeder:
                     "type": org.org_type,
                     "settings": org.settings,
                 },
-                headers={"Authorization": f"Bearer {admin_token}"}
+                headers={"Authorization": f"Bearer {admin_token}"},
             )
 
             if response.status_code in [200, 201]:
@@ -368,16 +374,20 @@ class DevSeeder:
     def _create_org_direct(self, org: OrgConfig) -> str | None:
         """Fallback: create org directly in DB."""
         try:
-            response = self.supabase.table("organizations").upsert(
-                {
-                    "name": org.name,
-                    "slug": org.slug,
-                    "type": org.org_type,
-                    "description": org.description,
-                    "settings": org.settings,
-                },
-                on_conflict="slug"
-            ).execute()
+            response = (
+                self.supabase.table("organizations")
+                .upsert(
+                    {
+                        "name": org.name,
+                        "slug": org.slug,
+                        "type": org.org_type,
+                        "description": org.description,
+                        "settings": org.settings,
+                    },
+                    on_conflict="slug",
+                )
+                .execute()
+            )
 
             if response.data:
                 org_id = response.data[0]["id"]
@@ -406,11 +416,7 @@ class DevSeeder:
         return None
 
     def add_membership(
-        self,
-        user_id: str,
-        org_slug: str,
-        role: str,
-        admin_token: str | None = None
+        self, user_id: str, org_slug: str, role: str, admin_token: str | None = None
     ) -> None:
         """Add user to organization with role."""
         org_id = self.org_ids.get(org_slug)
@@ -447,7 +453,7 @@ class DevSeeder:
                     "role": role,
                     "status": "active",
                 },
-                on_conflict="organization_id,user_id"
+                on_conflict="organization_id,user_id",
             ).execute()
             print(f"      🔗 {org_slug} → {role}")
 
@@ -486,18 +492,20 @@ class DevSeeder:
             if profile.data:
                 actor_email = profile.data[0].get("email")
 
-            self.supabase.schema("audit").from_("logs").insert({
-                "actor_id": actor_id,
-                "actor_email": actor_email,
-                "organization_id": organization_id,
-                "category_code": category,
-                "action": action,
-                "resource": resource,
-                "resource_id": resource_id,
-                "metadata": metadata or {},
-                "ip_address": "127.0.0.1",
-                "user_agent": "OASIS-Seed-Script/1.0",
-            }).execute()
+            self.supabase.schema("audit").from_("logs").insert(
+                {
+                    "actor_id": actor_id,
+                    "actor_email": actor_email,
+                    "organization_id": organization_id,
+                    "category_code": category,
+                    "action": action,
+                    "resource": resource,
+                    "resource_id": resource_id,
+                    "metadata": metadata or {},
+                    "ip_address": "127.0.0.1",
+                    "user_agent": "OASIS-Seed-Script/1.0",
+                }
+            ).execute()
         except Exception:
             pass  # Silent fail for audit logs
 
@@ -586,9 +594,12 @@ class DevSeeder:
 # MAIN
 # =============================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Seed OASIS development data via API")
-    parser.add_argument("--clean", action="store_true", help="Clean existing data first")
+    parser.add_argument(
+        "--clean", action="store_true", help="Clean existing data first"
+    )
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help="API base URL")
     args = parser.parse_args()
 
@@ -610,8 +621,8 @@ def main():
     # Check API is running
     if not seeder.check_api_health():
         print("\n❌ API is not running!")
-        print(f"   Start it with: uvicorn services.auth_service.main:app --reload")
-        print(f"   Then run this script again.")
+        print("   Start it with: uvicorn services.auth_service.main:app --reload")
+        print("   Then run this script again.")
         sys.exit(1)
 
     print("   ✅ API is healthy")

@@ -16,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from common.auth.security import get_current_user
 from common.database.client import get_admin_client, get_supabase_client
+from common.middleware import limit_auth
 from common.schemas.logs import LogCategory
 from services.auth_service.crud import log_user_action
 from services.auth_service.schemas.auth import (
@@ -36,34 +37,37 @@ security = HTTPBearer()
 # Registration
 # ============================================================================
 
+
 @router.post(
     "/register",
     response_model=TokenSchema,
     status_code=status.HTTP_201_CREATED,
     summary="Register new user",
     description="Create a new user account and return authentication tokens.",
+    responses={429: {"description": "Rate limit excedido"}},
 )
+@limit_auth("10/minute")  # Strict limit to prevent mass registration
 async def register(
-    user_in: UserRegister,
     request: Request,
-    db=Depends(get_supabase_client),
-    admin_db=Depends(get_admin_client),
+    user_in: UserRegister,
+    db=Depends(get_supabase_client),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ) -> Any:
     """
     Registra un nuevo usuario en Supabase Auth.
-    
+
     El trigger `handle_new_user` en Supabase automáticamente:
     - Crea el perfil en `profiles`
     - Asigna membresía a la comunidad por defecto
     """
     try:
-        auth_response = await db.auth.sign_up({
-            "email": user_in.email,
-            "password": user_in.password,
-            "options": {
-                "data": {"full_name": user_in.full_name}
-            },
-        })
+        auth_response = await db.auth.sign_up(
+            {
+                "email": user_in.email,
+                "password": user_in.password,
+                "options": {"data": {"full_name": user_in.full_name}},
+            }
+        )
 
         if not auth_response.session:
             # Email confirmation required
@@ -101,28 +105,35 @@ async def register(
 # Login
 # ============================================================================
 
+
 @router.post(
     "/login",
     response_model=TokenSchema,
     summary="Login",
     description="Authenticate with email and password, receive tokens.",
+    responses={
+        429: {"description": "Rate limit excedido - posible ataque de fuerza bruta"}
+    },
 )
+@limit_auth("20/minute")  # Prevent brute force attacks
 async def login(
-    credentials: LoginCredentials,
     request: Request,
-    db=Depends(get_supabase_client),
-    admin_db=Depends(get_admin_client),
+    credentials: LoginCredentials,
+    db=Depends(get_supabase_client),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ) -> Any:
     """
     Autentica credenciales contra Supabase Auth.
-    
+
     Retorna tokens JWT nativos de Supabase.
     """
     try:
-        auth_res = await db.auth.sign_in_with_password({
-            "email": credentials.email,
-            "password": credentials.password,
-        })
+        auth_res = await db.auth.sign_in_with_password(
+            {
+                "email": credentials.email,
+                "password": credentials.password,
+            }
+        )
     except Exception as e:
         raise HTTPException(
             status_code=401,
@@ -162,6 +173,7 @@ async def login(
 # Token Refresh
 # ============================================================================
 
+
 @router.post(
     "/refresh",
     response_model=TokenSchema,
@@ -170,7 +182,7 @@ async def login(
 )
 async def refresh_session(
     refresh_req: RefreshTokenRequest,
-    db=Depends(get_supabase_client),
+    db=Depends(get_supabase_client),  # noqa: B008
 ) -> Any:
     """
     Renueva el Access Token usando el Refresh Token.
@@ -205,6 +217,7 @@ async def refresh_session(
 # Logout
 # ============================================================================
 
+
 @router.post(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -213,10 +226,10 @@ async def refresh_session(
 )
 async def logout(
     request: Request,
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_supabase_client),
-    admin_db=Depends(get_admin_client),
-    token: HTTPAuthorizationCredentials = Depends(security),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db=Depends(get_supabase_client),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
 ) -> None:
     """
     Cierra la sesión actual.
@@ -241,6 +254,7 @@ async def logout(
 # Current User Context
 # ============================================================================
 
+
 @router.get(
     "/me",
     response_model=UserResponse,
@@ -248,40 +262,43 @@ async def logout(
     description="Get the authenticated user's profile and organization memberships.",
 )
 async def read_users_me(
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_supabase_client),
-    token: HTTPAuthorizationCredentials = Depends(security),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db=Depends(get_supabase_client),  # noqa: B008
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
 ) -> Any:
     """
     Obtiene el perfil completo del usuario actual incluyendo sus membresías.
-    
+
     Este endpoint es esencial para que el frontend sepa:
     - Quién es el usuario
     - Si es Platform Admin
     - A qué organizaciones pertenece y con qué rol
-    
+
     Defensa en profundidad:
     - Backend verifica identidad via get_current_user
     - RLS verifica que solo accede a sus propios datos
     """
     # Configurar RLS con el contexto del usuario
     db.postgrest.auth(token.credentials)
-    
+
     user_id = current_user["id"]
-    
+
     try:
         # Query de perfil - RLS asegura que solo veo mi perfil
         profile_res = (
             await db.table("profiles")
-            .select("id, email, full_name, avatar_url, is_platform_admin, metadata, created_at, updated_at")
+            .select(
+                "id, email, full_name, avatar_url, is_platform_admin,"
+                "metadata, created_at, updated_at"
+            )
             .eq("id", user_id)
             .single()
             .execute()
         )
-        
+
         if not profile_res.data:
             raise HTTPException(status_code=404, detail="Profile not found")
-        
+
         # Query de membresías - RLS asegura que solo veo mis membresías
         memberships_res = (
             await db.table("organization_members")
@@ -293,43 +310,51 @@ async def read_users_me(
             .eq("status", "active")
             .execute()
         )
-        
+
         # Formatear membresías
         formatted_memberships = []
         for m in memberships_res.data or []:
             if m.get("organizations"):
-                formatted_memberships.append({
-                    "role": m["role"],
-                    "status": m["status"],
-                    "joined_at": m["joined_at"],
-                    "organization": m["organizations"],
-                })
-        
+                formatted_memberships.append(
+                    {
+                        "role": m["role"],
+                        "status": m["status"],
+                        "joined_at": m["joined_at"],
+                        "organization": m["organizations"],
+                    }
+                )
+
         return {**profile_res.data, "memberships": formatted_memberships}
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching profile: {e}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching profile: {e}"
+        ) from e
 
 
 # ============================================================================
 # Password Management
 # ============================================================================
 
+
 @router.post(
     "/password/reset-request",
     status_code=status.HTTP_200_OK,
     summary="Request password reset",
     description="Send password reset email to the user.",
+    responses={429: {"description": "Rate limit excedido"}},
 )
+@limit_auth("5/minute")  # Very strict to prevent email spam
 async def request_password_reset(
+    request: Request,
     payload: PasswordResetRequest,
-    db=Depends(get_supabase_client),
+    db=Depends(get_supabase_client),  # noqa: B008
 ) -> Any:
     """
     Inicia el flujo de recuperación de contraseña.
-    
+
     Supabase envía el email con el link de reset.
     La respuesta es siempre exitosa para evitar enumeración de usuarios.
     """
@@ -338,7 +363,7 @@ async def request_password_reset(
     except Exception:
         # Silent failure to prevent user enumeration
         pass
-    
+
     return {"message": "If the email exists, you will receive reset instructions."}
 
 
@@ -350,13 +375,13 @@ async def request_password_reset(
 )
 async def update_password(
     payload: PasswordUpdate,
-    token: HTTPAuthorizationCredentials = Depends(security),
-    db=Depends(get_supabase_client),
-    admin_db=Depends(get_admin_client),
+    token: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
+    db=Depends(get_supabase_client),  # noqa: B008
+    admin_db=Depends(get_admin_client),  # noqa: B008
 ) -> Any:
     """
     Actualiza la contraseña del usuario.
-    
+
     Requiere un token válido (de login o del link de reset).
     """
     try:
