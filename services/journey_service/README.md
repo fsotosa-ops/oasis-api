@@ -1,6 +1,6 @@
 # Journey Service
 
-**Motor de Experiencia, Progresión y Gamificación para OASIS**
+**Motor de Experiencia, Progresion y Gamificacion para OASIS**
 
 ## Descripcion
 
@@ -17,37 +17,66 @@ Journey Service gestiona la experiencia del usuario dentro de la plataforma OASI
 journey_service/
 ├── api/
 │   └── v1/
-│       ├── api.py              # Router principal
+│       ├── api.py                # Router principal
 │       └── endpoints/
-│           ├── enrollments.py  # Inscripciones en journeys
-│           └── tracking.py     # Registro de actividades
+│           ├── journeys.py       # CRUD de journeys
+│           ├── enrollments.py    # Inscripciones y progreso
+│           ├── tracking.py       # Registro de actividades
+│           └── gamification.py   # Stats, rewards, leaderboard
 ├── core/
-│   └── config.py               # Configuracion (hereda de CommonSettings)
+│   └── config.py                 # Configuracion (hereda CommonSettings)
 ├── crud/
-│   └── enrollments.py          # Operaciones de base de datos
+│   ├── enrollments.py            # Operaciones de inscripciones
+│   ├── journeys.py               # Operaciones de journeys
+│   └── gamification.py           # Operaciones de gamificacion
 ├── logic/
-│   └── gamification.py         # Calculo de puntos y niveles
+│   └── gamification.py           # Calculo de puntos y niveles
 ├── schemas/
-│   ├── enrollments.py          # Schemas de inscripciones
-│   ├── journeys.py             # Schemas de journeys
-│   └── tracking.py             # Schemas de actividades
-└── main.py                     # Aplicacion FastAPI
+│   ├── enrollments.py            # Schemas de inscripciones
+│   ├── journeys.py               # Schemas de journeys
+│   ├── tracking.py               # Schemas de actividades
+│   └── gamification.py           # Schemas de stats y rewards
+└── main.py                       # Aplicacion FastAPI
 ```
 
 ## Endpoints
 
+### Journeys
+
+| Metodo | Endpoint | Descripcion | Auth |
+|--------|----------|-------------|------|
+| `GET` | `/journeys/` | Listar journeys de mi organizacion | Member |
+| `GET` | `/journeys/{id}` | Detalle de journey con steps | User |
+| `GET` | `/journeys/{id}/steps` | Steps ordenados de un journey | User |
+
 ### Enrollments
 
-| Metodo | Endpoint | Descripcion |
-|--------|----------|-------------|
-| `POST` | `/api/v1/enrollments/` | Inscribir usuario autenticado en un journey |
-| `GET` | `/api/v1/enrollments/me` | Obtener mis inscripciones |
+| Metodo | Endpoint | Descripcion | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/enrollments/` | Inscribirse en un journey | User |
+| `GET` | `/enrollments/me` | Mis inscripciones | User |
+| `GET` | `/enrollments/{id}` | Detalle de inscripcion con progreso | Owner |
+| `GET` | `/enrollments/{id}/progress` | Progreso detallado por steps | Owner |
+| `POST` | `/enrollments/{id}/complete` | Marcar journey como completado | Owner |
+| `POST` | `/enrollments/{id}/drop` | Abandonar journey | Owner |
+| `POST` | `/enrollments/{id}/resume` | Retomar journey abandonado | Owner |
+
+### Gamification
+
+| Metodo | Endpoint | Descripcion | Auth |
+|--------|----------|-------------|------|
+| `GET` | `/me/stats` | Puntos, nivel, progreso general | User |
+| `GET` | `/me/rewards` | Mis insignias/badges | User |
+| `GET` | `/me/activity` | Historial de actividades | User |
+| `GET` | `/me/points-history` | Historial de puntos | User |
+| `GET` | `/me/leaderboard` | Ranking de usuarios | User |
+| `GET` | `/me/levels` | Niveles disponibles | User |
 
 ### Tracking
 
-| Metodo | Endpoint | Descripcion |
-|--------|----------|-------------|
-| `POST` | `/api/v1/tracking/event` | Registrar actividad y calcular puntos |
+| Metodo | Endpoint | Descripcion | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/tracking/event` | Registrar actividad y calcular puntos | User |
 
 ### System
 
@@ -57,13 +86,17 @@ journey_service/
 
 ## Autenticacion
 
-Todos los endpoints requieren un JWT valido en el header:
+Todos los endpoints requieren un JWT valido:
 
 ```http
 Authorization: Bearer <access_token>
 ```
 
-El `user_id` se obtiene automaticamente del token JWT, nunca del payload.
+Para endpoints de organizacion, agregar:
+
+```http
+X-Organization-ID: <uuid>
+```
 
 ## Rate Limiting
 
@@ -74,7 +107,7 @@ El `user_id` se obtiene automaticamente del token JWT, nunca del payload.
 
 ## Modelo de Datos
 
-### Journeys Schema (PostgreSQL)
+### Schema PostgreSQL (`journeys.*`)
 
 ```
 journeys.journeys          # Rutas de experiencia
@@ -90,9 +123,9 @@ journeys.points_ledger     # Ledger transaccional de puntos
 
 ### RLS Policies
 
-- Los usuarios solo pueden ver/modificar sus propios datos
-- Los journeys son visibles para miembros de la organizacion
-- El ledger de puntos es solo lectura para usuarios
+- Usuarios solo pueden ver/modificar sus propios datos
+- Journeys visibles para miembros de la organizacion
+- Ledger de puntos es solo lectura para usuarios
 
 ## Gamificacion
 
@@ -116,6 +149,39 @@ journeys.points_ledger     # Ledger transaccional de puntos
 | `comment` | 2 |
 | `like` | 1 |
 
+### Funciones RPC
+
+```sql
+journeys.get_user_total_points(uid)           -- Total de puntos
+journeys.get_user_current_level(uid, org_id)  -- Nivel actual
+journeys.calculate_enrollment_progress(id)    -- % de progreso
+```
+
+## Respuestas
+
+Todas las respuestas usan el envelope `OasisResponse`:
+
+```json
+{
+  "success": true,
+  "message": "Operacion exitosa",
+  "data": { ... },
+  "meta": { "total": 10, "skip": 0, "limit": 50 }
+}
+```
+
+Errores:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "journey_002",
+    "message": "Ya tienes una inscripcion activa"
+  }
+}
+```
+
 ## Ejecucion
 
 ### Desarrollo
@@ -127,7 +193,7 @@ poetry run uvicorn services.journey_service.main:app --reload --port 8002
 ### Documentacion
 
 - Swagger UI: http://localhost:8002/api/v1/docs
-- OpenAPI JSON: http://localhost:8002/api/v1/openapi.json
+- ReDoc: http://localhost:8002/api/v1/redoc
 
 ## Variables de Entorno
 
@@ -144,7 +210,7 @@ JWT_ALGORITHM=HS256
 Especificas del servicio:
 
 ```env
-TYPEFORM_SECRET=your-typeform-webhook-secret  # Para webhooks de Typeform
+TYPEFORM_SECRET=your-typeform-webhook-secret
 ```
 
 ## Tests

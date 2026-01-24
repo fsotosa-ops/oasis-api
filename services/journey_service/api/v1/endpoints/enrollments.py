@@ -5,12 +5,19 @@ from fastapi import APIRouter, Depends, status
 from common.auth.security import get_current_user
 from common.database.client import get_admin_client
 from common.errors import ErrorCodes
-from common.exceptions import ConflictError, InternalError
+from common.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    InternalError,
+    NotFoundError,
+)
 from common.schemas.responses import OasisErrorResponse, OasisResponse
 from services.journey_service.crud import enrollments as crud
 from services.journey_service.schemas.enrollments import (
     EnrollmentCreate,
+    EnrollmentDetailResponse,
     EnrollmentResponse,
+    StepCompletionOut,
 )
 from supabase import AsyncClient
 
@@ -119,4 +126,210 @@ async def get_my_enrollments(
         success=True,
         message=f"Se encontraron {len(response_data)} inscripciones.",
         data=response_data,
+    )
+
+
+@router.get(
+    "/{enrollment_id}",
+    response_model=OasisResponse[EnrollmentDetailResponse],
+    summary="Obtener detalle de inscripción",
+    description="Obtiene el detalle de una inscripción con su progreso.",
+)
+async def get_enrollment_detail(
+    enrollment_id: UUID,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncClient = Depends(get_admin_client),  # noqa: B008
+):
+    """
+    Obtiene el detalle de una inscripción incluyendo:
+    - Información del journey
+    - Steps completados
+    - Progreso actual
+    """
+    user_id = UUID(current_user["id"])
+
+    enrollment = await crud.get_enrollment_with_progress(db, enrollment_id)
+
+    if not enrollment:
+        raise NotFoundError("Enrollment", str(enrollment_id))
+
+    # Verificar que pertenece al usuario
+    if enrollment["user_id"] != str(user_id):
+        raise ForbiddenError("No tienes acceso a esta inscripción.")
+
+    return OasisResponse(
+        success=True,
+        message="Inscripción encontrada.",
+        data=enrollment,
+    )
+
+
+@router.get(
+    "/{enrollment_id}/progress",
+    response_model=OasisResponse[list[StepCompletionOut]],
+    summary="Obtener progreso detallado",
+    description="Lista los steps completados de una inscripción.",
+)
+async def get_enrollment_progress(
+    enrollment_id: UUID,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncClient = Depends(get_admin_client),  # noqa: B008
+):
+    """
+    Obtiene el progreso detallado de una inscripción:
+    - Lista de steps con estado (locked, available, completed)
+    - Puntos ganados por step
+    """
+    user_id = UUID(current_user["id"])
+
+    # Verificar ownership
+    enrollment = await crud.get_enrollment_by_id(db, enrollment_id)
+    if not enrollment:
+        raise NotFoundError("Enrollment", str(enrollment_id))
+
+    if enrollment["user_id"] != str(user_id):
+        raise ForbiddenError("No tienes acceso a esta inscripción.")
+
+    progress = await crud.get_enrollment_step_progress(db, enrollment_id)
+
+    return OasisResponse(
+        success=True,
+        message=(
+            f"Progreso: {len([p for p in progress if p.get('completed')])} "
+            "steps completados."
+        ),
+        data=progress,
+    )
+
+
+@router.post(
+    "/{enrollment_id}/complete",
+    response_model=OasisResponse[EnrollmentResponse],
+    summary="Marcar journey como completado",
+    description=(
+        "Marca el journey como completado si todos los steps están completos."
+    ),
+)
+async def complete_enrollment(
+    enrollment_id: UUID,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncClient = Depends(get_admin_client),  # noqa: B008
+):
+    """
+    Marca un journey como completado.
+
+    Valida que todos los steps obligatorios estén completados.
+    """
+    user_id = UUID(current_user["id"])
+
+    enrollment = await crud.get_enrollment_by_id(db, enrollment_id)
+    if not enrollment:
+        raise NotFoundError("Enrollment", str(enrollment_id))
+
+    if enrollment["user_id"] != str(user_id):
+        raise ForbiddenError("No tienes acceso a esta inscripción.")
+
+    if enrollment["status"] == "completed":
+        raise ConflictError(
+            code="already_completed",
+            message="Este journey ya está completado.",
+        )
+
+    # Verificar que se puede completar
+    can_complete, message = await crud.can_complete_enrollment(db, enrollment_id)
+    if not can_complete:
+        raise ConflictError(code="incomplete_steps", message=message)
+
+    # Marcar como completado
+    updated = await crud.update_enrollment_status(db, enrollment_id, "completed")
+
+    return OasisResponse(
+        success=True,
+        message="Journey completado exitosamente.",
+        data=EnrollmentResponse(**updated),
+    )
+
+
+@router.post(
+    "/{enrollment_id}/drop",
+    response_model=OasisResponse[EnrollmentResponse],
+    summary="Abandonar journey",
+    description="Marca el journey como abandonado.",
+)
+async def drop_enrollment(
+    enrollment_id: UUID,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncClient = Depends(get_admin_client),  # noqa: B008
+):
+    """
+    Abandona un journey activo.
+
+    El progreso se mantiene por si el usuario quiere retomarlo.
+    """
+    user_id = UUID(current_user["id"])
+
+    enrollment = await crud.get_enrollment_by_id(db, enrollment_id)
+    if not enrollment:
+        raise NotFoundError("Enrollment", str(enrollment_id))
+
+    if enrollment["user_id"] != str(user_id):
+        raise ForbiddenError("No tienes acceso a esta inscripción.")
+
+    if enrollment["status"] != "active":
+        raise ConflictError(
+            code="invalid_status",
+            message=(
+                f"No se puede abandonar un journey con estado '{enrollment['status']}'."
+            ),
+        )
+
+    updated = await crud.update_enrollment_status(db, enrollment_id, "dropped")
+
+    return OasisResponse(
+        success=True,
+        message="Journey abandonado. Puedes retomarlo cuando quieras.",
+        data=EnrollmentResponse(**updated),
+    )
+
+
+@router.post(
+    "/{enrollment_id}/resume",
+    response_model=OasisResponse[EnrollmentResponse],
+    summary="Retomar journey abandonado",
+    description="Reactiva un journey que fue abandonado.",
+)
+async def resume_enrollment(
+    enrollment_id: UUID,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+    db: AsyncClient = Depends(get_admin_client),  # noqa: B008
+):
+    """
+    Retoma un journey abandonado.
+
+    Mantiene el progreso previo.
+    """
+    user_id = UUID(current_user["id"])
+
+    enrollment = await crud.get_enrollment_by_id(db, enrollment_id)
+    if not enrollment:
+        raise NotFoundError("Enrollment", str(enrollment_id))
+
+    if enrollment["user_id"] != str(user_id):
+        raise ForbiddenError("No tienes acceso a esta inscripción.")
+
+    if enrollment["status"] != "dropped":
+        raise ConflictError(
+            code="invalid_status",
+            message=(
+                "Solo se pueden retomar journeys abandonados."
+                "Estado actual: '{enrollment['status']}'."
+            ),
+        )
+
+    updated = await crud.update_enrollment_status(db, enrollment_id, "active")
+
+    return OasisResponse(
+        success=True,
+        message="Journey reactivado. Continúa donde lo dejaste.",
+        data=EnrollmentResponse(**updated),
     )
