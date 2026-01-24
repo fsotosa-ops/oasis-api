@@ -2,7 +2,7 @@
   <img src="public/favicon.png" width="120" alt="OASIS Logo">
 </p>
 
-# OASIS API 🌴
+# OASIS API
 
 <p align="center">
   <strong>Plataforma Multi-Tenant de Salud Mental y Resiliencia impulsada por IA</strong>
@@ -17,107 +17,262 @@
 
 ---
 
-**OASIS API** es el motor de microservicios que alimenta el ecosistema digital de la **Fundación Summer**. Diseñado con una arquitectura **Multi-Tenant (B2B/B2C)**, gestiona de forma segura identidades, organizaciones y el viaje emocional de los participantes mediante IA y gamificación.
+**OASIS API** es el motor de microservicios que alimenta el ecosistema digital de la **Fundacion Summer**. Disenado con una arquitectura **Multi-Tenant (B2B/B2C)**, gestiona de forma segura identidades, organizaciones y el viaje emocional de los participantes mediante IA y gamificacion.
 
-## ✨ Características Principales
+## Caracteristicas Principales
 
-* 🏢 **Arquitectura Multi-Tenant**: Soporte nativo para Organizaciones (Sponsors/Empresas) y Comunidad (B2C) en una misma instancia.
-* 🛡️ **Seguridad Contextual**: Autenticación vía Supabase Auth con validación de contexto `X-Organization-ID`.
-* 👁️ **Sistema de Auditoría**: Logs inmutables de seguridad y cumplimiento normativo (ISO/GDPR ready).
-* 🤖 **AI Agents**: Agentes especializados en *Coaching* y *Mentoría* utilizando Google Gemini.
-* 🎮 **OASIS Journey**: Motor de gamificación con niveles y puntos (XP).
-* 🚀 **Scalability**: Arquitectura desacoplada lista para **Google Cloud Run**.
+- **Arquitectura Multi-Tenant**: Soporte nativo para Organizaciones (Sponsors/Empresas) y Comunidad (B2C) en una misma instancia
+- **Seguridad en Profundidad**: Autenticacion JWT + RLS Policies + Rate Limiting
+- **Sistema de Auditoria**: Logs inmutables de seguridad y cumplimiento normativo (ISO/GDPR ready)
+- **AI Agents**: Agentes especializados en Coaching y Mentoria utilizando Google Gemini
+- **Journey Engine**: Motor de gamificacion con niveles, puntos y recompensas
+- **Escalabilidad**: Arquitectura desacoplada lista para Google Cloud Run
 
-## 🏗️ Arquitectura del Sistema
+## Arquitectura del Sistema
 
-El ecosistema está fragmentado en microservicios especializados para garantizar alta disponibilidad:
-```text
-               [ Frontend Next.js ]
-                       ⬆
-              [ API Gateway /v1/ ]
-     ┌─────────────┬─────────────┬─────────────┐
-[ Auth-Service ] [ Journey-Service ] [ AI-Service ] ...
-     └─────────────┴─────────────┴─────────────┘
-                       ⬆
-               [ Supabase DB / RAG ]
-          (Auth, Profiles, Audit, Vectors)
+```
+                 [ Frontend Next.js ]
+                         |
+                [ API Gateway /v1/ ]
+       +-----------------+-----------------+
+       |                 |                 |
+[ Auth Service ]  [ Journey Service ]  [ AI Service ]
+       |                 |                 |
+       +-----------------+-----------------+
+                         |
+                 [ Supabase DB ]
+            (Auth, Profiles, Journeys, Vectors)
 ```
 
-## 🛠️ Stack Tecnológico
+## Microservicios
 
-- Lenguaje: Python 3.11+
-- Framework: FastAPI (Asíncrono)
-- Base de Datos: PostgreSQL + pgvector (vía Supabase)
-- Auth: Supabase Auth (JWT) + RLS Policies
-- IA: Google Gemini 1.5 Flash / Pro
-- Calidad: Ruff (Linting & Formatting) y Pre-commit hooks
-- Infraestructura: Docker + Google Cloud Run
+| Servicio | Puerto | Descripcion |
+|----------|--------|-------------|
+| **auth_service** | 8001 | Identidad, autenticacion, organizaciones y auditoria |
+| **journey_service** | 8002 | Experiencia, progresion y gamificacion |
+| **ai_service** | 8003 | Agentes de coaching con Gemini |
 
-## 🚀 Inicio Rápido
+## Stack Tecnologico
+
+| Categoria | Tecnologia |
+|-----------|------------|
+| Lenguaje | Python 3.11+ |
+| Framework | FastAPI (Asincrono) |
+| Base de Datos | PostgreSQL + pgvector (via Supabase) |
+| Autenticacion | Supabase Auth (JWT) + RLS Policies |
+| Rate Limiting | slowapi (in-memory / Redis) |
+| IA | Google Gemini 1.5 Flash / Pro |
+| Calidad | Ruff (Linting & Formatting) + Pre-commit |
+| Infraestructura | Docker + Google Cloud Run |
+
+## Inicio Rapido
 
 ### Requisitos Previos
 
-1. Instancia de Supabase activa (Local o Cloud).
-2. Python 3.11+ y Poetry instalado.
-3. Variables de entorno configuradas (.env).
+1. Instancia de Supabase activa (Local o Cloud)
+2. Python 3.11+ y Poetry instalado
+3. Variables de entorno configuradas (.env)
 
-### Instalación
+### Instalacion
 
-Clonar y configurar:
 ```bash
+# Clonar repositorio
 git clone https://github.com/tu-usuario/oasis-api.git
 cd oasis-api
-cp .env.example .env
-```
 
-Instalar dependencias:
-```bash
+# Configurar variables de entorno
+cp .env.example .env
+
+# Instalar dependencias
 poetry install
+
+# Configurar pre-commit hooks
 pre-commit install
 ```
 
-Inicializar Base de Datos (Seed):
+### Base de Datos
 
-> Carga usuarios, roles y organizaciones por defecto.
 ```bash
-python -m scripts.create_users
+# Aplicar migraciones (requiere Supabase CLI)
+supabase db push
+
+# Cargar datos iniciales
+python -m scripts.seed_dev
 ```
 
-Ejecutar Servidor de Desarrollo:
+### Ejecutar Servicios
+
 ```bash
-poetry run uvicorn services.auth_service.main:app --reload
+# Auth Service (puerto 8001)
+poetry run uvicorn services.auth_service.main:app --reload --port 8001
+
+# Journey Service (puerto 8002)
+poetry run uvicorn services.journey_service.main:app --reload --port 8002
 ```
 
-Documentación interactiva disponible en: http://localhost:8000/api/v1/docs
+### Documentacion Interactiva
 
-## 👥 Matriz de Seguridad y Roles
+- Auth Service: http://localhost:8001/api/v1/docs
+- Journey Service: http://localhost:8002/api/v1/docs
 
-El sistema maneja dos niveles de roles: Nivel Plataforma (Global) y Nivel Organización (Contextual).
+## Estructura del Proyecto
 
-1. **Nivel Plataforma (Global)**
+```
+oasis-api/
+├── common/                    # Codigo compartido entre servicios
+│   ├── auth/
+│   │   └── security.py        # JWT validation, role checkers
+│   ├── database/
+│   │   └── client.py          # Singleton Supabase clients
+│   ├── middleware/
+│   │   └── rate_limit.py      # Rate limiting centralizado
+│   ├── schemas/
+│   │   ├── responses.py       # OasisResponse envelope
+│   │   └── logs.py            # Audit log schemas
+│   ├── config.py              # CommonSettings base
+│   ├── errors.py              # ErrorCodes centralizados
+│   └── exceptions.py          # OasisException + handlers
+├── services/
+│   ├── auth_service/          # Identidad y acceso
+│   ├── journey_service/       # Gamificacion
+│   └── ai_service/            # Agentes IA
+├── supabase/
+│   └── migrations/            # SQL migrations
+├── scripts/
+│   └── seed_dev.py            # Datos de desarrollo
+└── pyproject.toml             # Dependencias Poetry
+```
+
+## Seguridad
+
+### Defensa en Profundidad
+
+```
+1. Rate Limiting     → Proteccion DDoS y abuso
+2. JWT Validation    → Autenticacion de identidad
+3. Role Checkers     → Autorizacion en backend (Python)
+4. RLS Policies      → Autorizacion en base de datos (PostgreSQL)
+```
+
+### Rate Limits
+
+| Endpoint | Limite | Proposito |
+|----------|--------|-----------|
+| `POST /auth/register` | 10/min | Prevenir creacion masiva |
+| `POST /auth/login` | 20/min | Prevenir fuerza bruta |
+| `POST /auth/password/reset` | 5/min | Prevenir spam de emails |
+| `POST /tracking/event` | 60/min | Prevenir abuso de puntos |
+| Default | 200/min | Uso general |
+
+### Roles del Sistema
+
+**Nivel Plataforma (Global)**
 
 | Rol | Alcance |
 |-----|---------|
-| Platform Admin | "God Mode". Puede ver todos los logs de auditoría, gestionar cualquier organización y realizar tareas de mantenimiento global. |
-| Usuario Estándar | Acceso limitado a sus propios datos y a las organizaciones donde es miembro. |
+| Platform Admin | Acceso total. Gestiona todas las organizaciones y usuarios |
+| Usuario Estandar | Acceso a sus datos y organizaciones donde es miembro |
 
-2. **Nivel Organización (Contextual)**
+**Nivel Organizacion (Contextual)**
 
-> Estos permisos aplican solo dentro de la organización especificada en el header `X-Organization-ID`.
+> Requiere header `X-Organization-ID`
 
 | Rol | Alcance |
 |-----|---------|
-| Owner | Dueño de la instancia B2B. Gestión de facturación, configuración de marca y gestión de admins. |
-| Admin | Gestión operativa: invitar miembros, ver reportes y gestionar equipos. |
-| Facilitador | (Staff) Puede gestionar eventos y ver progreso de participantes asignados. |
-| Participante | (Usuario final) Acceso a journeys, contenido y herramientas de bienestar. |
+| Owner | Dueno de la org. Facturacion, configuracion, gestion de admins |
+| Admin | Gestion operativa: invitar miembros, ver reportes |
+| Facilitador | Staff. Gestiona eventos y ve progreso de participantes |
+| Participante | Usuario final. Acceso a journeys y contenido |
 
-## 📡 Integración API
+## Integracion API
 
-Para consumir endpoints protegidos por organización (ej: invitar miembro), se deben enviar los siguientes headers:
+### Headers Requeridos
+
 ```http
 Authorization: Bearer <access_token>
-X-Organization-ID: <uuid-de-la-organizacion>
+X-Organization-ID: <uuid>  # Solo para endpoints contextuales
 ```
 
-<p align="center">Hecho con 💙 para la <strong>Fundación Summer</strong> • 2026</p>
+### Formato de Respuesta
+
+Todas las respuestas siguen el envelope `OasisResponse`:
+
+```json
+{
+  "success": true,
+  "message": "Operacion exitosa",
+  "data": { ... },
+  "meta": { "pagination": { ... } }
+}
+```
+
+Errores:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "journey_002",
+    "message": "Ya tienes una inscripcion activa"
+  }
+}
+```
+
+## Testing
+
+```bash
+# Ejecutar todos los tests
+pytest
+
+# Tests de un servicio especifico
+pytest services/auth_service/tests/
+
+# Con coverage
+pytest --cov=services --cov-report=html
+```
+
+## Deployment
+
+### Docker
+
+```bash
+# Build
+docker build -t oasis-auth -f services/auth_service/Dockerfile .
+
+# Run
+docker run -p 8001:8001 --env-file .env oasis-auth
+```
+
+### Google Cloud Run
+
+```bash
+gcloud run deploy oasis-auth \
+  --source services/auth_service \
+  --region us-central1 \
+  --allow-unauthenticated
+```
+
+## Contribucion
+
+1. Fork del repositorio
+2. Crear rama feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit con convencion (`git commit -m "feat: agregar nueva funcionalidad"`)
+4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Crear Pull Request
+
+### Convencion de Commits
+
+```
+feat:     Nueva funcionalidad
+fix:      Correccion de bug
+docs:     Documentacion
+refactor: Refactorizacion de codigo
+test:     Tests
+chore:    Tareas de mantenimiento
+```
+
+---
+
+<p align="center">
+  Hecho con amor para la <strong>Fundacion Summer</strong> | 2026
+</p>
