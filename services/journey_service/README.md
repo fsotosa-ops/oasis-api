@@ -10,6 +10,7 @@ Journey Service gestiona la experiencia del usuario dentro de la plataforma OASI
 - **Enrollments**: Inscripciones de usuarios en journeys
 - **Gamificacion**: Sistema de puntos, niveles y recompensas
 - **Tracking**: Registro de actividades y progreso
+- **Backoffice**: Administracion completa de journeys, steps, niveles y rewards
 
 ## Arquitectura
 
@@ -17,66 +18,163 @@ Journey Service gestiona la experiencia del usuario dentro de la plataforma OASI
 journey_service/
 ├── api/
 │   └── v1/
-│       ├── api.py                # Router principal
+│       ├── api.py                    # Router principal
 │       └── endpoints/
-│           ├── journeys.py       # CRUD de journeys
-│           ├── enrollments.py    # Inscripciones y progreso
-│           ├── tracking.py       # Registro de actividades
-│           └── gamification.py   # Stats, rewards, leaderboard
+│           ├── journeys.py           # Lectura de journeys (usuarios)
+│           ├── enrollments.py        # Inscripciones y progreso
+│           ├── tracking.py           # Registro de actividades
+│           ├── gamification.py       # Stats, rewards, leaderboard
+│           ├── admin_journeys.py     # CRUD journeys/steps (admin)
+│           ├── admin_gamification.py # Config niveles/rewards (admin)
+│           └── admin_analytics.py    # Reportes (admin)
 ├── core/
-│   └── config.py                 # Configuracion (hereda CommonSettings)
+│   └── config.py                     # Configuracion (hereda CommonSettings)
 ├── crud/
-│   ├── enrollments.py            # Operaciones de inscripciones
-│   ├── journeys.py               # Operaciones de journeys
-│   └── gamification.py           # Operaciones de gamificacion
-├── logic/
-│   └── gamification.py           # Calculo de puntos y niveles
+│   ├── admin.py                      # Operaciones admin
+│   ├── enrollments.py                # Operaciones de inscripciones
+│   ├── journeys.py                   # Operaciones de journeys
+│   └── gamification.py               # Operaciones de gamificacion
 ├── schemas/
-│   ├── enrollments.py            # Schemas de inscripciones
-│   ├── journeys.py               # Schemas de journeys
-│   ├── tracking.py               # Schemas de actividades
-│   └── gamification.py           # Schemas de stats y rewards
-└── main.py                       # Aplicacion FastAPI
+│   ├── admin.py                      # Schemas de backoffice
+│   ├── enrollments.py                # Schemas de inscripciones
+│   ├── journeys.py                   # Schemas de journeys
+│   ├── tracking.py                   # Schemas de actividades
+│   └── gamification.py               # Schemas de stats y rewards
+└── main.py                           # Aplicacion FastAPI
 ```
 
-## Endpoints
+## Seguridad y Multi-tenancy
+
+**IMPORTANTE**: Todos los endpoints respetan el aislamiento por organizacion.
+
+### Headers Requeridos
+
+```http
+Authorization: Bearer <access_token>
+X-Organization-ID: <uuid>
+```
+
+### Flujo de Autorizacion
+
+```
+Request
+  ↓
+JWT Validation (Bearer token)
+  ↓
+OrgMemberRequired() → Verifica membresia activa en X-Organization-ID
+  ↓
+verify_journey_belongs_to_org() → Verifica que el recurso pertenezca a la org
+  ↓
+Operacion permitida
+```
+
+### Roles de Acceso
+
+| Rol | Endpoints Usuario | Endpoints Admin |
+|-----|-------------------|-----------------|
+| `participante` | ✅ | ❌ |
+| `facilitador` | ✅ | ❌ |
+| `admin` | ✅ | ✅ |
+| `owner` | ✅ | ✅ |
+| `platform_admin` | ✅ (todas las orgs) | ✅ (todas las orgs) |
+
+---
+
+## Endpoints de Usuario
+
+Todos requieren `Authorization` + `X-Organization-ID`.
 
 ### Journeys
 
-| Metodo | Endpoint | Descripcion | Auth |
-|--------|----------|-------------|------|
-| `GET` | `/journeys/` | Listar journeys de mi organizacion | Member |
-| `GET` | `/journeys/{id}` | Detalle de journey con steps | User |
-| `GET` | `/journeys/{id}/steps` | Steps ordenados de un journey | User |
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `GET` | `/journeys/` | Listar journeys de mi organizacion |
+| `GET` | `/journeys/{id}` | Detalle de journey con steps |
+| `GET` | `/journeys/{id}/steps` | Steps ordenados de un journey |
 
 ### Enrollments
 
-| Metodo | Endpoint | Descripcion | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/enrollments/` | Inscribirse en un journey | User |
-| `GET` | `/enrollments/me` | Mis inscripciones | User |
-| `GET` | `/enrollments/{id}` | Detalle de inscripcion con progreso | Owner |
-| `GET` | `/enrollments/{id}/progress` | Progreso detallado por steps | Owner |
-| `POST` | `/enrollments/{id}/complete` | Marcar journey como completado | Owner |
-| `POST` | `/enrollments/{id}/drop` | Abandonar journey | Owner |
-| `POST` | `/enrollments/{id}/resume` | Retomar journey abandonado | Owner |
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `POST` | `/enrollments/` | Inscribirse en un journey |
+| `GET` | `/enrollments/me` | Mis inscripciones |
+| `GET` | `/enrollments/{id}` | Detalle de inscripcion con progreso |
+| `GET` | `/enrollments/{id}/progress` | Progreso detallado por steps |
+| `POST` | `/enrollments/{id}/complete` | Marcar journey como completado |
+| `POST` | `/enrollments/{id}/drop` | Abandonar journey |
+| `POST` | `/enrollments/{id}/resume` | Retomar journey abandonado |
 
 ### Gamification
 
-| Metodo | Endpoint | Descripcion | Auth |
-|--------|----------|-------------|------|
-| `GET` | `/me/stats` | Puntos, nivel, progreso general | User |
-| `GET` | `/me/rewards` | Mis insignias/badges | User |
-| `GET` | `/me/activity` | Historial de actividades | User |
-| `GET` | `/me/points-history` | Historial de puntos | User |
-| `GET` | `/me/leaderboard` | Ranking de usuarios | User |
-| `GET` | `/me/levels` | Niveles disponibles | User |
+| Metodo | Endpoint | Descripcion | Requiere Org |
+|--------|----------|-------------|--------------|
+| `GET` | `/me/stats` | Puntos, nivel, progreso general | No |
+| `GET` | `/me/rewards` | Mis insignias/badges | No |
+| `GET` | `/me/activity` | Historial de actividades | No |
+| `GET` | `/me/points-history` | Historial de puntos | No |
+| `GET` | `/me/leaderboard` | Ranking de mi organizacion | **Si** |
+| `GET` | `/me/levels` | Niveles de mi organizacion | **Si** |
 
 ### Tracking
 
-| Metodo | Endpoint | Descripcion | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/tracking/event` | Registrar actividad y calcular puntos | User |
+| Metodo | Endpoint | Descripcion | Rate Limit |
+|--------|----------|-------------|------------|
+| `POST` | `/tracking/event` | Registrar actividad | 60/min |
+
+---
+
+## Endpoints de Admin (Backoffice)
+
+Requieren rol `owner` o `admin` + `X-Organization-ID`.
+
+### Admin - Journeys
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `GET` | `/admin/journeys/` | Listar journeys con estadisticas |
+| `POST` | `/admin/journeys/` | Crear journey (como borrador) |
+| `GET` | `/admin/journeys/{id}` | Detalle de journey con stats |
+| `PUT` | `/admin/journeys/{id}` | Actualizar journey |
+| `DELETE` | `/admin/journeys/{id}` | Eliminar journey (cascada) |
+| `POST` | `/admin/journeys/{id}/publish` | Publicar/activar journey |
+| `POST` | `/admin/journeys/{id}/archive` | Archivar/desactivar journey |
+| `GET` | `/admin/journeys/{id}/stats` | Estadisticas detalladas |
+
+### Admin - Steps
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `GET` | `/admin/journeys/{id}/steps` | Listar steps con stats |
+| `POST` | `/admin/journeys/{id}/steps` | Crear step |
+| `PUT` | `/admin/journeys/{id}/steps/{step_id}` | Actualizar step |
+| `DELETE` | `/admin/journeys/{id}/steps/{step_id}` | Eliminar step |
+| `POST` | `/admin/journeys/{id}/steps/reorder` | Reordenar steps |
+
+### Admin - Levels
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `GET` | `/admin/levels` | Listar niveles de la org |
+| `POST` | `/admin/levels` | Crear nivel |
+| `PUT` | `/admin/levels/{id}` | Actualizar nivel |
+| `DELETE` | `/admin/levels/{id}` | Eliminar nivel |
+
+### Admin - Rewards
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `GET` | `/admin/rewards` | Listar recompensas/badges |
+| `POST` | `/admin/rewards` | Crear recompensa |
+| `PUT` | `/admin/rewards/{id}` | Actualizar recompensa |
+| `DELETE` | `/admin/rewards/{id}` | Eliminar recompensa |
+
+### Admin - Analytics
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| `GET` | `/admin/enrollments` | Listar todas las inscripciones |
+| `GET` | `/admin/users/{id}/progress` | Progreso de un usuario |
+| `GET` | `/admin/summary` | Resumen analytics de la org |
 
 ### System
 
@@ -84,19 +182,7 @@ journey_service/
 |--------|----------|-------------|
 | `GET` | `/health` | Health check del servicio |
 
-## Autenticacion
-
-Todos los endpoints requieren un JWT valido:
-
-```http
-Authorization: Bearer <access_token>
-```
-
-Para endpoints de organizacion, agregar:
-
-```http
-X-Organization-ID: <uuid>
-```
+---
 
 ## Rate Limiting
 
@@ -126,6 +212,7 @@ journeys.points_ledger     # Ledger transaccional de puntos
 - Usuarios solo pueden ver/modificar sus propios datos
 - Journeys visibles para miembros de la organizacion
 - Ledger de puntos es solo lectura para usuarios
+- Admin bypasea RLS via service_role
 
 ## Gamificacion
 
@@ -182,6 +269,63 @@ Errores:
 }
 ```
 
+## Ejemplos de Uso
+
+### Usuario: Listar Journeys
+
+```bash
+curl -X GET "http://localhost:8002/api/v1/journeys/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID"
+```
+
+### Usuario: Inscribirse en Journey
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/enrollments/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"journey_id": "uuid-del-journey"}'
+```
+
+### Admin: Crear Journey
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/admin/journeys/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Onboarding de Bienestar",
+    "slug": "onboarding-bienestar",
+    "description": "Ruta de 30 dias para mejorar tu bienestar"
+  }'
+```
+
+### Admin: Agregar Step
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/admin/journeys/$JOURNEY_ID/steps" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Encuesta inicial",
+    "type": "survey",
+    "config": { "typeform_id": "abc123" },
+    "gamification_rules": { "points_base": 10 }
+  }'
+```
+
+### Admin: Publicar Journey
+
+```bash
+curl -X POST "http://localhost:8002/api/v1/admin/journeys/$JOURNEY_ID/publish" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Organization-ID: $ORG_ID"
+```
+
 ## Ejecucion
 
 ### Desarrollo
@@ -205,12 +349,6 @@ SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 SUPABASE_JWT_SECRET=your-jwt-secret
 JWT_ALGORITHM=HS256
-```
-
-Especificas del servicio:
-
-```env
-TYPEFORM_SECRET=your-typeform-webhook-secret
 ```
 
 ## Tests

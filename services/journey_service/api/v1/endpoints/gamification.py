@@ -1,8 +1,15 @@
+"""
+User gamification endpoints.
+
+Stats, rewards, activity, and leaderboard for authenticated users.
+Organization context required for leaderboard and levels.
+"""
+
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Query
 
-from common.auth.security import get_current_user
+from common.auth.security import OrgMemberRequired, get_current_user
 from common.database.client import get_admin_client
 from common.schemas.responses import OasisResponse
 from services.journey_service.crud import gamification as crud
@@ -123,20 +130,20 @@ async def get_points_history(
     "/leaderboard",
     response_model=OasisResponse[list[LeaderboardEntry]],
     summary="Obtener ranking",
-    description="Obtiene el ranking de usuarios por puntos.",
+    description="Obtiene el ranking de usuarios por puntos en tu organización.",
 )
 async def get_leaderboard(
-    current_user: dict = Depends(get_current_user),  # noqa: B008
+    ctx: dict = Depends(OrgMemberRequired()),  # noqa: B008
     db: AsyncClient = Depends(get_admin_client),  # noqa: B008
-    x_organization_id: str | None = Header(None),
     limit: int = Query(20, ge=1, le=100),
 ):
     """
     Obtiene el ranking de usuarios por puntos totales.
 
-    Si se proporciona X-Organization-ID, filtra por organización.
+    Requiere header X-Organization-ID para filtrar por organización.
+    Solo muestra usuarios de tu misma organización.
     """
-    org_id = UUID(x_organization_id) if x_organization_id else None
+    org_id = UUID(ctx["org_id"])
     leaderboard = await crud.get_leaderboard(db, org_id, limit)
 
     return OasisResponse(
@@ -153,14 +160,16 @@ async def get_leaderboard(
     description="Lista los niveles y sus requisitos de puntos.",
 )
 async def get_levels(
-    current_user: dict = Depends(get_current_user),  # noqa: B008
+    ctx: dict = Depends(OrgMemberRequired()),  # noqa: B008
     db: AsyncClient = Depends(get_admin_client),  # noqa: B008
-    x_organization_id: str | None = Header(None),
 ):
     """
     Obtiene los niveles disponibles ordenados por puntos requeridos.
+
+    Requiere header X-Organization-ID para obtener los niveles
+    configurados para tu organización.
     """
-    org_id = UUID(x_organization_id) if x_organization_id else None
+    org_id = UUID(ctx["org_id"])
     levels = await crud.get_available_levels(db, org_id)
 
     return OasisResponse(

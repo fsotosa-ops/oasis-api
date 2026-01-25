@@ -101,3 +101,29 @@ async def get_step_by_id(db: AsyncClient, step_id: UUID) -> dict | None:
         .execute()
     )
     return response.data
+
+
+async def verify_journey_belongs_to_org(
+    db: AsyncClient,
+    journey_id: UUID,
+    org_id: str,
+) -> bool:
+    """
+    Verifica que un journey pertenezca a una organización específica.
+
+    Args:
+        db: Cliente Supabase
+        journey_id: ID del journey a verificar
+        org_id: ID de la organización esperada
+
+    Returns:
+        True si el journey pertenece a la organización, False en caso contrario
+    """
+    response = (
+        await db.table("journeys.journeys")
+        .select("id")
+        .eq("id", str(journey_id))
+        .eq("organization_id", org_id)
+        .execute()
+    )
+    return len(response.data) > 0 if response.data else False

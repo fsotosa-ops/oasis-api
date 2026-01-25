@@ -49,8 +49,26 @@
 | Servicio | Puerto | Descripcion |
 |----------|--------|-------------|
 | **auth_service** | 8001 | Identidad, autenticacion, organizaciones y auditoria |
-| **journey_service** | 8002 | Experiencia, progresion y gamificacion |
+| **journey_service** | 8002 | Experiencia, progresion, gamificacion y backoffice admin |
 | **ai_service** | 8003 | Agentes de coaching con Gemini |
+
+### Endpoints Principales
+
+**Auth Service** (`/api/v1/`)
+- `/auth/*` - Login, registro, tokens
+- `/users/*` - Gestion de usuarios y perfiles
+- `/organizations/*` - CRUD de organizaciones y miembros
+- `/audit/*` - Logs de auditoria (admin)
+
+**Journey Service** (`/api/v1/`)
+- `/journeys/*` - Lectura de journeys (usuarios)
+- `/enrollments/*` - Inscripciones y progreso
+- `/me/*` - Gamificacion: stats, rewards, leaderboard
+- `/tracking/*` - Registro de actividades
+- `/admin/journeys/*` - CRUD journeys y steps (backoffice)
+- `/admin/levels/*` - Configuracion de niveles (backoffice)
+- `/admin/rewards/*` - Catalogo de recompensas (backoffice)
+- `/admin/enrollments` - Analytics de inscripciones (backoffice)
 
 ## Stack Tecnologico
 
@@ -151,8 +169,24 @@ oasis-api/
 1. Rate Limiting     → Proteccion DDoS y abuso
 2. JWT Validation    → Autenticacion de identidad
 3. Role Checkers     → Autorizacion en backend (Python)
-4. RLS Policies      → Autorizacion en base de datos (PostgreSQL)
+4. Org Isolation     → Verificacion de pertenencia a organizacion
+5. RLS Policies      → Autorizacion en base de datos (PostgreSQL)
 ```
+
+### Aislamiento Multi-Tenant
+
+Todos los endpoints que acceden a recursos de organizacion verifican:
+
+```python
+# 1. Usuario autenticado (JWT)
+# 2. Membresia activa en la organizacion (X-Organization-ID)
+# 3. Recurso pertenece a la organizacion
+
+OrgMemberRequired()  # Valida 1 y 2
+verify_*_belongs_to_org()  # Valida 3
+```
+
+Esto previene acceso cross-tenant incluso si un atacante conoce UUIDs de otras organizaciones.
 
 ### Rate Limits
 

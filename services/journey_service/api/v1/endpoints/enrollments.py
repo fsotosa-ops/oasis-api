@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from common.auth.security import get_current_user
+from common.auth.security import OrgMemberRequired, get_current_user
 from common.database.client import get_admin_client
 from common.errors import ErrorCodes
 from common.exceptions import (
@@ -13,6 +13,7 @@ from common.exceptions import (
 )
 from common.schemas.responses import OasisErrorResponse, OasisResponse
 from services.journey_service.crud import enrollments as crud
+from services.journey_service.crud import journeys as journeys_crud
 from services.journey_service.schemas.enrollments import (
     EnrollmentCreate,
     EnrollmentDetailResponse,
@@ -35,6 +36,7 @@ router = APIRouter()
     ),
     responses={
         401: {"description": "No autenticado"},
+        403: {"description": "Journey no pertenece a tu organización"},
         409: {
             "model": OasisErrorResponse,
             "description": "El usuario ya está inscrito.",
@@ -43,17 +45,27 @@ router = APIRouter()
 )
 async def enroll_user(
     payload: EnrollmentCreate,
-    current_user: dict = Depends(get_current_user),  # noqa: B008
+    ctx: dict = Depends(OrgMemberRequired()),  # noqa: B008
     db: AsyncClient = Depends(get_admin_client),  # noqa: B008
 ):
     """
     Inscribe al usuario autenticado en un journey.
 
     El user_id se obtiene automáticamente del token JWT, no del payload.
+    Requiere header X-Organization-ID y verifica que el journey pertenezca
+    a esa organización.
     """
-    user_id = UUID(current_user["id"])
+    user_id = UUID(ctx["id"])
+    org_id = ctx["org_id"]
 
-    # 1. Verificar duplicados
+    # 1. Verificar que el journey pertenece a la organización
+    belongs = await journeys_crud.verify_journey_belongs_to_org(
+        db, payload.journey_id, org_id
+    )
+    if not belongs:
+        raise ForbiddenError("El journey no pertenece a tu organización.")
+
+    # 2. Verificar duplicados
     existing = await crud.get_active_enrollment(db, user_id, payload.journey_id)
     if existing:
         raise ConflictError(
@@ -61,7 +73,7 @@ async def enroll_user(
             message="Ya tienes una inscripción activa en este Journey.",
         )
 
-    # 2. Crear inscripción
+    # 3. Crear inscripción
     try:
         new_enrollment = await crud.create_enrollment(db, user_id, payload)
 
