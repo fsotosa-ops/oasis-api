@@ -120,6 +120,7 @@ Todos requieren `Authorization` + `X-Organization-ID`.
 | Metodo | Endpoint | Descripcion | Rate Limit |
 |--------|----------|-------------|------------|
 | `POST` | `/tracking/event` | Registrar actividad | 60/min |
+| `POST` | `/tracking/external-event` | Evento externo (webhook_service) | Service-to-service |
 
 ---
 
@@ -339,6 +340,65 @@ poetry run uvicorn services.journey_service.main:app --reload --port 8002
 - Swagger UI: http://localhost:8002/api/v1/docs
 - ReDoc: http://localhost:8002/api/v1/redoc
 
+## Integracion con Webhook Service
+
+Journey Service recibe eventos externos normalizados desde el webhook_service.
+
+### Endpoint: `/tracking/external-event`
+
+Este endpoint es **solo para comunicacion service-to-service** con webhook_service.
+
+```http
+POST /api/v1/tracking/external-event
+Authorization: Bearer {SERVICE_TO_SERVICE_TOKEN}
+X-Event-Source: webhook_service
+Content-Type: application/json
+
+{
+  "source": "typeform",
+  "event_type": "form_submission",
+  "external_id": "evt_xxx",
+  "resource_id": "form_abc123",
+  "occurred_at": "2026-01-25T10:30:00Z",
+  "user_identifier": "user-uuid-or-email",
+  "organization_id": "org-uuid",
+  "metadata": {
+    "enrollment_id": "enrollment-uuid",
+    "journey_id": "journey-uuid",
+    "step_id": "step-uuid",
+    "form_id": "typeform-form-id"
+  }
+}
+```
+
+### Flujo de Procesamiento
+
+```
+1. webhook_service recibe webhook de Typeform
+2. Valida firma HMAC-SHA256
+3. Normaliza payload al formato OASIS
+4. Persiste en webhooks.events (resiliencia)
+5. Despacha a journey_service /external-event
+6. Journey Service:
+   a. Verifica idempotencia (external_event_id)
+   b. Resuelve usuario por identifier
+   c. Busca step asociado por form_id
+   d. Registra step_completion
+   e. Otorga puntos
+```
+
+### Mapeo Step <-> Typeform
+
+Para vincular un step con un formulario Typeform, configurar `external_config`:
+
+```json
+{
+  "external_config": {
+    "form_id": "abc123"
+  }
+}
+```
+
 ## Variables de Entorno
 
 Hereda de `CommonSettings`:
@@ -349,6 +409,9 @@ SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 SUPABASE_JWT_SECRET=your-jwt-secret
 JWT_ALGORITHM=HS256
+
+# Service-to-service auth (mismo valor que en webhook_service)
+SERVICE_TO_SERVICE_TOKEN=secure-random-token
 ```
 
 ## Tests

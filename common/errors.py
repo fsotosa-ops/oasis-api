@@ -16,3 +16,7 @@ class ErrorCodes:
 
     # Webhooks
     INVALID_SIGNATURE = "webhook_001"
+    PROVIDER_NOT_FOUND = "webhook_002"
+    PROVIDER_NOT_CONFIGURED = "webhook_003"
+    INVALID_PAYLOAD = "webhook_004"
+    EVENT_ALREADY_PROCESSED = "webhook_005"

@@ -14,6 +14,9 @@ class JourneySettings(CommonSettings):
     # Journey-specific settings
     TYPEFORM_SECRET: str = ""
 
+    # Service-to-service authentication (for webhook_service)
+    SERVICE_TO_SERVICE_TOKEN: str = ""
+
     # Gamification defaults (can be overridden per org)
     DEFAULT_POINTS_SOCIAL_POST: int = 5
     DEFAULT_POINTS_VIDEO_VIEW: int = 3

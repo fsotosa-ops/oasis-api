@@ -31,17 +31,24 @@
 ## Arquitectura del Sistema
 
 ```
-                 [ Frontend Next.js ]
-                         |
-                [ API Gateway /v1/ ]
-       +-----------------+-----------------+
-       |                 |                 |
-[ Auth Service ]  [ Journey Service ]  [ AI Service ]
-       |                 |                 |
-       +-----------------+-----------------+
-                         |
-                 [ Supabase DB ]
-            (Auth, Profiles, Journeys, Vectors)
+                      [ Frontend Next.js ]
+                              |
+                     [ API Gateway /v1/ ]
+       +----------+-----------+-----------+----------+
+       |          |           |           |          |
+[ Auth      [ Journey    [ AI        [ Webhook      |
+  Service ]   Service ]    Service ]   Service ]    |
+       |          |           |           |          |
+       +----------+-----------+-----------+----------+
+                              |
+                      [ Supabase DB ]
+               (Auth, Profiles, Journeys, Vectors)
+                              |
+                              |
+       +----------------------+----------------------+
+       |                                             |
+[ Typeform ]                                   [ Stripe ]
+(Encuestas)                                    (Pagos)
 ```
 
 ## Microservicios
@@ -51,6 +58,7 @@
 | **auth_service** | 8001 | Identidad, autenticacion, organizaciones y auditoria |
 | **journey_service** | 8002 | Experiencia, progresion, gamificacion y backoffice admin |
 | **ai_service** | 8003 | Agentes de coaching con Gemini |
+| **webhook_service** | 8004 | Gateway universal de webhooks (Typeform, Stripe, etc.) |
 
 ### Endpoints Principales
 
@@ -64,11 +72,16 @@
 - `/journeys/*` - Lectura de journeys (usuarios)
 - `/enrollments/*` - Inscripciones y progreso
 - `/me/*` - Gamificacion: stats, rewards, leaderboard
-- `/tracking/*` - Registro de actividades
+- `/tracking/*` - Registro de actividades y eventos externos
 - `/admin/journeys/*` - CRUD journeys y steps (backoffice)
 - `/admin/levels/*` - Configuracion de niveles (backoffice)
 - `/admin/rewards/*` - Catalogo de recompensas (backoffice)
 - `/admin/enrollments` - Analytics de inscripciones (backoffice)
+
+**Webhook Service** (`/api/v1/`)
+- `POST /webhooks/{provider}` - Recibir webhook de cualquier proveedor
+- `GET /webhooks/providers` - Listar proveedores y estado
+- `POST /webhooks/dlq/retry` - Reintentar eventos fallidos
 
 ## Stack Tecnologico
 
@@ -126,12 +139,16 @@ poetry run uvicorn services.auth_service.main:app --reload --port 8001
 
 # Journey Service (puerto 8002)
 poetry run uvicorn services.journey_service.main:app --reload --port 8002
+
+# Webhook Service (puerto 8004)
+poetry run uvicorn services.webhook_service.main:app --reload --port 8004
 ```
 
 ### Documentacion Interactiva
 
 - Auth Service: http://localhost:8001/api/v1/docs
 - Journey Service: http://localhost:8002/api/v1/docs
+- Webhook Service: http://localhost:8004/api/v1/docs
 
 ## Estructura del Proyecto
 
@@ -153,6 +170,7 @@ oasis-api/
 ├── services/
 │   ├── auth_service/          # Identidad y acceso
 │   ├── journey_service/       # Gamificacion
+│   ├── webhook_service/       # Gateway de webhooks externos
 │   └── ai_service/            # Agentes IA
 ├── supabase/
 │   └── migrations/            # SQL migrations
